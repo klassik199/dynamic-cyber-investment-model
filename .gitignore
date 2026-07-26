@@ -1,0 +1,39 @@
+﻿# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter / IDE
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Generated numerical results
+results/
+plots/
+full_grid_results*/
+insurance_impact_results*/
+wykresy/
+wykresy_rekonstrukcja/
+
+# Large binary outputs
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+
+# Generated data files
+*.csv
+*.xlsx
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
