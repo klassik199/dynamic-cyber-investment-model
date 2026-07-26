@@ -1,7 +1,4 @@
-# compute_selected_trajectory_dynamics_S1.py
-# Dla wybranych simulation_id odczytuje trajektorie lambda_t i N_t,
-# wyznacza z_t^*, H_t, 1-S_1(H_t,v)/v oraz dekompozycje kosztow.
-# Wyniki zapisuje do CSV i tworzy pojedyncze wykresy diagnostyczne.
+"""Compute selected Hawkes trajectory dynamics for the exponential leakage function S1."""
 
 from pathlib import Path
 import argparse
@@ -13,10 +10,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-# ============================================================
-# Domyslne ustawienia - mozna zmieniac tutaj albo przez argumenty w konsoli
-# ============================================================
 
 DEFAULT_BASELINE_ID = 6221
 DEFAULT_STRESS_ID = 57457
@@ -30,12 +23,8 @@ VARIANT_NAME = "S1"
 LEAKAGE_FUNCTION = "S1_exponential"
 
 
-# ============================================================
-# Wczytywanie danych
-# ============================================================
-
 def load_json_first_existing(paths: list[Path]) -> dict:
-    """Wczytuje pierwszy istniejacy plik JSON z listy."""
+    """Load the first available JSON file from a list of candidate paths."""
     for path in paths:
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
@@ -49,7 +38,7 @@ def load_json_first_existing(paths: list[Path]) -> dict:
 
 
 def load_params(policy_dir: Path) -> dict:
-    """Wczytuje parametry modelu, preferujac parametry zapisane przy solverze."""
+    """Load model parameters, preferring files saved by the solver."""
     possible_paths = [
         policy_dir / "full_solver.params.json",
         policy_dir / "full_solver_params.json",
@@ -60,7 +49,7 @@ def load_params(policy_dir: Path) -> dict:
 
 
 def load_policy(policy_dir: Path) -> np.ndarray:
-    """Wczytuje tablice polityki z_t^*."""
+    """Load the stored optimal policy array."""
     path = policy_dir / "z_policy_full_float32.npy"
     if not path.exists():
         raise FileNotFoundError(f"Nie znaleziono pliku polityki: {path}")
@@ -72,10 +61,7 @@ def load_policy(policy_dir: Path) -> np.ndarray:
 
 
 def load_poisson_policy(policy_dir: Path, params: dict) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Wczytuje polityke optymalna dla jednorodnego procesu Poissona.
-    Polityka ma wymiar (N+1, N_h+1), poniewaz zalezy tylko od (t,H).
-    """
+    """Load the Poisson benchmark policy, which depends only on time and H."""
     policy_path = policy_dir / "z_policy_full_float32.npy"
     if not policy_path.exists():
         raise FileNotFoundError(
@@ -111,7 +97,7 @@ def load_poisson_policy(policy_dir: Path, params: dict) -> tuple[np.ndarray, np.
 
 
 def load_selection_summary(selection_dir: Path) -> pd.DataFrame | None:
-    """Wczytuje podsumowanie selekcji, jesli istnieje."""
+    """Load the trajectory selection summary if it exists."""
     path = selection_dir / "trajectory_selection_summary.csv"
     if path.exists():
         return pd.read_csv(path)
@@ -119,10 +105,7 @@ def load_selection_summary(selection_dir: Path) -> pd.DataFrame | None:
 
 
 def load_path_from_all_grids(selection_dir: Path, sim_id: int):
-    """
-    Wczytuje lambda_t i N_t z plikow all_lambda_grid/all_N_grid.
-    Uzywa mmap, wiec nie laduje calej macierzy do pamieci.
-    """
+    """Load lambda_t and N_t from the stored grid arrays using memory mapping."""
     lambda_path = selection_dir / "all_lambda_grid_float32.npy"
     N_path = selection_dir / "all_N_grid_uint16.npy"
 
@@ -146,7 +129,7 @@ def load_path_from_all_grids(selection_dir: Path, sim_id: int):
 
 
 def find_candidate_csv(selection_dir: Path, sim_id: int) -> Path | None:
-    """Szuka pliku CSV kandydata po simulation_id."""
+    """Find a candidate trajectory CSV by simulation id."""
     pattern = f"*_sim_{sim_id:05d}.csv"
     candidate_dir = selection_dir / "candidate_trajectories"
 
@@ -161,7 +144,7 @@ def find_candidate_csv(selection_dir: Path, sim_id: int) -> Path | None:
 
 
 def load_path_from_candidate_csv(selection_dir: Path, sim_id: int):
-    """Awaryjnie wczytuje trajektorie z CSV kandydata."""
+    """Fallback loader for a candidate trajectory CSV."""
     path = find_candidate_csv(selection_dir, sim_id)
     if path is None:
         return None
@@ -180,10 +163,7 @@ def load_path_from_candidate_csv(selection_dir: Path, sim_id: int):
 
 
 def load_selected_path(selection_dir: Path, sim_id: int):
-    """
-    Wczytuje wybrana trajektorie.
-    Najpierw probuje uzyc all_lambda_grid/all_N_grid, a potem CSV kandydata.
-    """
+    """Load a selected trajectory from stored grids or, if needed, from a candidate CSV."""
     out = load_path_from_all_grids(selection_dir, sim_id)
     source = "all_grids"
 
@@ -202,19 +182,15 @@ def load_selected_path(selection_dir: Path, sim_id: int):
     return lambda_grid, N_grid, dN, source
 
 
-# ============================================================
-# Model i interpolacja polityki
-# ============================================================
-
 def S1_leakage(H: np.ndarray | float, params: dict) -> np.ndarray | float:
-    """Funkcja prawdopodobienstwa wycieku S_1(H,v)=v exp(-a_1 H)."""
+    """Exponential leakage probability S1(H,v)."""
     v = float(params["v"])
     a1 = float(params["a_1"])
     return v * np.exp(-a1 * H)
 
 
 def premium(H: np.ndarray | float, params: dict) -> np.ndarray | float:
-    """Skladka pi(H)=pi_0(1-r(1-S(H,v)/v))."""
+    """Insurance premium as a function of the current security level."""
     v = float(params["v"])
     pi0 = float(params["pi_0"])
     r = float(params["r"])
@@ -224,7 +200,7 @@ def premium(H: np.ndarray | float, params: dict) -> np.ndarray | float:
 
 
 def investment_cost(z: np.ndarray | float, params: dict) -> np.ndarray | float:
-    """Koszt inwestycji c(z)=zeta z + gamma/2 z^2."""
+    """Investment cost function."""
     zeta = float(params["zeta"])
     gamma = float(params["gamma"])
     return zeta * z + 0.5 * gamma * z ** 2
@@ -237,14 +213,7 @@ def bilinear_policy_value(
     H_value: float,
     params: dict,
 ) -> tuple[float, bool, bool]:
-    """
-    Odczytuje z^*(t_n, lambda, H) z tablicy polityki przez interpolacje biliniowa.
-
-    Zwraca:
-        z_value          - wartosc interpolowana,
-        lambda_clipped   - czy lambda zostala obcieta do zakresu siatki,
-        H_clipped        - czy H zostalo obciete do zakresu siatki.
-    """
+    """Interpolate the optimal policy at a given time and state."""
     n_t, n_lam, n_H = z_policy.shape
 
     n = int(np.clip(n, 0, n_t - 1))
@@ -325,7 +294,6 @@ def compute_dynamics_for_path(
 
     exp_rho = np.exp(-rho * dt) if rho != 0.0 else None
 
-    # Odczyt z i aktualizacja H na przedzialach [t_n,t_{n+1}]
     for n in range(N):
         z_n, lambda_clipped, H_clipped = bilinear_policy_value(
             z_policy=z_policy,
@@ -345,7 +313,6 @@ def compute_dynamics_for_path(
         else:
             H_grid[n + 1] = exp_rho * H_grid[n] + ((1.0 - exp_rho) / rho) * z_n
 
-    # Wartosc z w ostatnim punkcie tylko do wykresu
     z_T, lambda_clipped, H_clipped = bilinear_policy_value(
         z_policy=z_policy,
         n=N,
@@ -365,7 +332,6 @@ def compute_dynamics_for_path(
     retained_loss_grid = eta_d * S_grid * lambda_grid
     total_running_grid = investment_grid + premium_grid + retained_loss_grid
 
-    # Skumulowane koszty liczone metoda lewych prostokatow na [0,T]
     cum_investment = np.zeros(N + 1, dtype=float)
     cum_premium = np.zeros(N + 1, dtype=float)
     cum_retained_loss = np.zeros(N + 1, dtype=float)
@@ -426,12 +392,8 @@ def compute_dynamics_for_path(
     return df, metrics
 
 
-# ============================================================
-# Pelny model Poissona
-# ============================================================
-
 def expected_hawkes_count(params: dict) -> float:
-    """Teoretyczna wartosc E[N_T] dla liniowego procesu Hawkesa."""
+    """Expected number of Hawkes arrivals over the time horizon."""
     alpha = float(params["alfa"])
     xi = float(params["ksi"])
     beta = float(params["beta"])
@@ -458,7 +420,7 @@ def poisson_policy_value(
     n: int,
     H_value: float,
 ) -> tuple[float, bool]:
-    """Interpoluje liniowo polityke Poissona po zmiennej H."""
+    """Interpolate the Poisson policy over the H grid."""
     n = int(np.clip(n, 0, z_policy_poisson.shape[0] - 1))
 
     H_min = float(H_grid_poisson[0])
@@ -482,10 +444,7 @@ def compute_poisson_dynamics(
     H_grid_poisson: np.ndarray,
     params: dict,
 ):
-    """
-    Wyznacza deterministyczna trajektorie optymalna dla pelnego modelu
-    jednorodnego procesu Poissona, rozwiazanego osobno na siatce (t,H).
-    """
+    """Compute the deterministic optimal trajectory for the Poisson benchmark."""
     T = float(params["T"])
     N = int(params["N"])
 
@@ -608,10 +567,6 @@ def compute_poisson_dynamics(
     return df, metrics
 
 
-# ============================================================
-# Estetyka wykresow i zaznaczanie okresow wzrostu intensywnosci
-# ============================================================
-
 FIGSIZE = (8.3, 5.25)
 DPI = 300
 
@@ -631,15 +586,7 @@ GROWTH_MIN_NET_RISE = 2.0
 
 
 def find_lambda_growth_intervals(df: pd.DataFrame) -> list[tuple[float, float]]:
-    """
-    Wyznacza szersze okresy wzrostu lambda_t, a nie pojedyncze skoki.
-
-    Najpierw lambda_t jest lekko wygladzana srednia ruchoma. Nastepnie
-    laczone sa krotkie przerwy pomiedzy sasiednimi odcinkami wzrostowymi.
-    Pozostaja tylko okresy o minimalnym czasie trwania i minimalnym
-    przyroscie intensywnosci. Te same przedzialy sa nanoszone na wszystkie
-    wykresy danej trajektorii.
-    """
+    """Find broader periods of increasing attack intensity for figure shading."""
     t = df["t"].to_numpy(dtype=float)
     lam = df["lambda_t"].to_numpy(dtype=float)
 
@@ -664,7 +611,6 @@ def find_lambda_growth_intervals(df: pd.DataFrame) -> list[tuple[float, float]]:
     rising = np.zeros(len(t), dtype=bool)
     rising[1:] = np.diff(smooth) > 0.0
 
-    # Laczenie bardzo krotkich spadkow wewnatrz jednego klastra wzrostowego.
     max_gap_steps = max(1, int(round(GROWTH_MAX_GAP / dt)))
     i = 0
     while i < len(rising):
@@ -708,7 +654,7 @@ def find_lambda_growth_intervals(df: pd.DataFrame) -> list[tuple[float, float]]:
 
 
 def add_growth_shading(ax, intervals: list[tuple[float, float]]) -> None:
-    """Dodaje jasne pionowe prostokaty dla okresow wzrostu lambda_t."""
+    """Shade periods in which the attack intensity is increasing."""
     for left, right in intervals:
         ax.axvspan(
             left,
@@ -721,7 +667,7 @@ def add_growth_shading(ax, intervals: list[tuple[float, float]]) -> None:
 
 
 def format_axes(ax):
-    """Ujednolicona estetyka osi: tylko bardzo jasna siatka pozioma."""
+    """Apply the common axis formatting used in the figures."""
     ax.xaxis.grid(False)
     ax.yaxis.grid(
         True,
@@ -961,8 +907,6 @@ def make_plots_for_path(
     )
 
 
-
-
 def shared_axis_limits(
     baseline_df: pd.DataFrame,
     stress_df: pd.DataFrame,
@@ -1001,7 +945,6 @@ def shared_axis_limits(
         lower_limit = lower - padding
         upper_limit = upper + padding
 
-        # Dla wielkości nieujemnych nie pokazujemy dużego obszaru poniżej zera.
         if include_zero and lower >= 0:
             lower_limit = 0.0
 
@@ -1073,10 +1016,6 @@ def shared_axis_limits(
         ),
     }
 
-
-# ============================================================
-# Tabela podsumowujaca w LaTeX-u
-# ============================================================
 
 def format_pl_number(value: float, decimals: int = 3) -> str:
     """Formatuje liczbe z przecinkiem dziesietnym do tabeli LaTeX."""
@@ -1161,10 +1100,6 @@ def create_latex_summary_table(metrics_df: pd.DataFrame, out_path: Path) -> None
     out_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-# ============================================================
-# Główna część
-# ============================================================
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Wyznacza dynamike z,H i koszty dla dwoch wybranych trajektorii procesu Hawkesa."
@@ -1242,7 +1177,6 @@ def main():
 
         metrics["process"] = "Hawkes"
 
-        # Dopisujemy informacje z pliku selekcji, jesli sa dostepne.
         if summary_df is not None and "simulation_id" in summary_df.columns:
             row = summary_df.loc[summary_df["simulation_id"] == sim_id]
             if len(row) == 1:

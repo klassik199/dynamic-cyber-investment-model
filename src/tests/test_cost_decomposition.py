@@ -1,3 +1,5 @@
+"""Compute a cost decomposition along the model-implied mean trajectory."""
+
 import json
 from pathlib import Path
 
@@ -210,8 +212,7 @@ def simulate_mean_trajectory(
         retained_loss_path[n] = retained_n
         total_running_cost_path[n] = c_n + pi_n + retained_n
 
-        # Średnia dynamika intensywności Hawkesa:
-        # d E[lambda] / dt = ksi * alfa - (ksi - beta) * E[lambda].
+
         if abs(kappa) > 1e-12:
             lambda_inf = ksi * alfa / kappa
             lambda_path[n + 1] = (
@@ -221,7 +222,7 @@ def simulate_mean_trajectory(
         else:
             lambda_path[n + 1] = lambda_n + ksi * alfa * dt
 
-        # Dokładna aktualizacja H przy stałym z na przedziale [t_n, t_{n+1}].
+
         if rho > 0:
             H_path[n + 1] = (
                 np.exp(-rho * dt) * H_n
@@ -440,7 +441,7 @@ def plot_cost_shares(
 def main() -> None:
     params = load_params()
 
-    # Parametry bazowe ustalone po wcześniejszych testach.
+
     params["N"] = 1000
     params["N_lambda"] = 100
     params["N_h"] = 100

@@ -1,3 +1,5 @@
+"""Check numerical stability across selected spatial grid sizes."""
+
 import json
 from pathlib import Path
 

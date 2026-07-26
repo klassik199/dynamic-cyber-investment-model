@@ -1,6 +1,4 @@
-# select_hawkes_trajectories_S1.py
-# Symulacja wielu trajektorii procesu Hawkesa, wybór kandydatów
-# reprezentatywnych i stresowych oraz przygotowanie wykresów lambda_t i N_t.
+"""Simulate Hawkes paths and select representative and stress trajectories for the numerical analysis."""
 
 from pathlib import Path
 import json
@@ -20,10 +18,6 @@ except ImportError:
     sys.exit(1)
 
 
-# ============================================================
-# Ustawienia
-# ============================================================
-
 PARAMS_PATH = Path("model_params.json")
 
 OUT_DIR = Path("trajectory_selection_S1")
@@ -37,26 +31,12 @@ SEED0 = 20260705
 N_MEDIAN_CANDIDATES = 100
 N_STRESS_CANDIDATES = 100
 
-# Ścieżki stresowe wybieramy z okolicy 95 percentyla skumulowanej intensywności,
-# ale tylko spośród ścieżek co najmniej tak stresowych jak 95 percentyl.
 STRESS_QUANTILE = 0.95
 
-# Jeśli True, skok w obrębie przedziału siatki jest dyskontowany dokładnie
-# do prawego końca przedziału:
-# beta * exp(-xi * (t_{n+1} - tau_i)).
-#
-# Jeśli False, używana jest uproszczona aktualizacja z Algorytmu 1:
-# beta * exp(-xi * dt) * Delta N_n.
 USE_EXACT_JUMP_DECAY = True
 
-# Czy zapisywać wszystkie siatki lambda_t i N_t.
-# Dla M=10000 pliki są umiarkowane: około kilkudziesięciu MB.
 SAVE_ALL_GRIDS = True
 
-
-# ============================================================
-# Funkcje pomocnicze
-# ============================================================
 
 def load_params(path: Path) -> dict:
     """Wczytuje parametry z pliku JSON."""
@@ -70,18 +50,7 @@ def load_params(path: Path) -> dict:
 
 
 def model_to_hawkespylib_params(params: dict) -> tuple[float, float, float]:
-    """
-    Model:
-        d lambda_t = xi(alpha - lambda_t) dt + beta dN_t
-
-    HawkesPyLib:
-        lambda(t) = mu + (eta/theta) sum exp(-(t-ti)/theta)
-
-    Mapowanie:
-        mu = alpha
-        theta = 1 / xi
-        eta = beta / xi
-    """
+    """Convert the model parameters to the parameterization used by HawkesPyLib."""
     alpha = float(params["alfa"])
     xi = float(params["ksi"])
     beta = float(params["beta"])
@@ -109,15 +78,7 @@ def simulate_one_hawkes_path(
     seed: int,
     use_exact_jump_decay: bool = True,
 ):
-    """
-    Symuluje jedną ścieżkę procesu N_t i odtwarza lambda_t na siatce.
-
-    Zwraca:
-        timestamps    - dokładne czasy skoków,
-        dN            - przyrosty N_{t_{n+1}} - N_{t_n},
-        N_grid        - proces N_t na siatce t_0,...,t_N,
-        lambda_grid   - intensywność lambda_t na siatce t_0,...,t_N.
-    """
+    """Simulate one Hawkes path and reconstruct lambda_t on the time grid."""
     timestamps = np.asarray(sim.simulate(T=T, seed=int(seed)), dtype=float)
 
     t_grid = np.linspace(0.0, T, N + 1)
@@ -133,11 +94,9 @@ def simulate_one_hawkes_path(
         jump_term = np.zeros(N, dtype=np.float64)
 
         if len(timestamps) > 0:
-            # Indeks przedziału [t_n, t_{n+1}), do którego wpada skok.
             idx = np.searchsorted(t_grid, timestamps, side="right") - 1
             idx = np.clip(idx, 0, N - 1)
 
-            # Wkład skoku w intensywność na prawym końcu przedziału.
             decay_to_right = np.exp(-xi * (t_grid[idx + 1] - timestamps))
             np.add.at(jump_term, idx, beta * decay_to_right)
     else:
@@ -157,10 +116,7 @@ def simulate_one_hawkes_path(
 
 
 def compute_median_scores(lambda_all: np.ndarray, N_all: np.ndarray) -> np.ndarray:
-    """
-    Wynik bliskości do mediany przebiegów.
-    Im mniejszy score, tym bardziej reprezentatywna ścieżka.
-    """
+    """Score how close each simulated path is to the median path."""
     median_lambda = np.median(lambda_all, axis=0)
     median_N = np.median(N_all.astype(float), axis=0)
 
@@ -180,11 +136,7 @@ def save_candidate_csv(
     N_grid: np.ndarray,
     dN: np.ndarray,
 ):
-    """
-    Zapisuje trajektorię kandydata do CSV.
-    Kolumna dN_interval_to_next oznacza przyrost w przedziale [t_n,t_{n+1}].
-    Dla ostatniego wiersza przyjęto 0.
-    """
+    """Save a candidate trajectory in the CSV format used by later scripts."""
     dN_full = np.zeros(len(t_grid), dtype=np.uint16)
     dN_full[:-1] = dN
 
@@ -207,13 +159,10 @@ def plot_overlay(
     out_prefix: Path,
     max_lines: int | None = None,
 ):
-    """
-    Tworzy dwa wykresy nakładane: lambda_t i N_t.
-    """
+    """Create overlay plots for lambda_t and N_t."""
     if max_lines is not None:
         selected_indices = selected_indices[:max_lines]
 
-    # Lambda
     fig, ax = plt.subplots(figsize=(9, 4.8))
 
     for sim_id in selected_indices:
@@ -238,7 +187,6 @@ def plot_overlay(
     plt.savefig(out_prefix.with_name(out_prefix.name + "_lambda_overlay.png"), dpi=300)
     plt.close()
 
-    # N_t
     fig, ax = plt.subplots(figsize=(9, 4.8))
 
     for sim_id in selected_indices:
@@ -273,10 +221,7 @@ def plot_candidate_grid_pages(
     out_prefix: Path,
     candidates_per_page: int = 10,
 ):
-    """
-    Tworzy strony z kandydatami.
-    Każdy kandydat ma dwa wykresy: lambda_t oraz N_t.
-    """
+    """Create grid pages with candidate paths and their counting processes."""
     n_pages = int(np.ceil(len(selected_indices) / candidates_per_page))
 
     for page in range(n_pages):
@@ -338,10 +283,6 @@ def plot_candidate_grid_pages(
         plt.close()
 
 
-# ============================================================
-# Główna część
-# ============================================================
-
 def main():
     start = time.time()
 
@@ -386,7 +327,6 @@ def main():
     max_lambda = np.empty(M, dtype=np.float32)
     integrated_lambda = np.empty(M, dtype=np.float32)
 
-    # Dla późniejszego zapisu kandydatów przechowujemy tylko czasy skoków.
     all_timestamps = []
 
     sim = ExpHawkesProcessSimulation(mu=mu, eta=eta, theta=theta)
@@ -427,9 +367,6 @@ def main():
         "exceeds_lambda_max": max_lambda > lambda_max
     })
 
-    # --------------------------------------------------------
-    # Wybór kandydatów medianowych
-    # --------------------------------------------------------
 
     print("\nWybór kandydatów bliskich medianie...")
 
@@ -438,9 +375,6 @@ def main():
 
     median_candidate_ids = np.argsort(median_score)[:N_MEDIAN_CANDIDATES]
 
-    # --------------------------------------------------------
-    # Wybór kandydatów stresowych
-    # --------------------------------------------------------
 
     print("Wybór kandydatów stresowych...")
 
@@ -448,8 +382,6 @@ def main():
 
     stress_pool = np.where(integrated_lambda >= q95_integrated)[0]
 
-    # Kandydaci najbliżsi progowi 95 percentyla od góry:
-    # są stresowi, ale nie są ekstremalnymi wartościami odstającymi.
     stress_order = stress_pool[
         np.argsort(np.abs(integrated_lambda[stress_pool] - q95_integrated))
     ]
@@ -460,16 +392,12 @@ def main():
     summary_df.loc[median_candidate_ids, "candidate_type"] = "median_candidate"
     summary_df.loc[stress_candidate_ids, "candidate_type"] = "stress_candidate"
 
-    # Jeżeli jakaś ścieżka znalazłaby się w obu grupach, dopisujemy oba oznaczenia.
     overlap = set(median_candidate_ids).intersection(set(stress_candidate_ids))
     for sim_id in overlap:
         summary_df.loc[summary_df["simulation_id"] == sim_id, "candidate_type"] = (
             "median_candidate;stress_candidate"
         )
 
-    # --------------------------------------------------------
-    # Zapis wyników
-    # --------------------------------------------------------
 
     summary_path = OUT_DIR / "trajectory_selection_summary.csv"
     summary_df.to_csv(summary_path, index=False)
@@ -478,7 +406,6 @@ def main():
 
     def save_group(group_name: str, candidate_ids: np.ndarray):
         for rank, sim_id in enumerate(candidate_ids, start=1):
-            # Odtwarzamy dN z N_grid, żeby zapisać spójny plik CSV.
             N_grid = N_all[sim_id]
             dN = np.diff(N_grid).astype(np.uint16)
 
@@ -523,9 +450,6 @@ def main():
         np.save(OUT_DIR / "all_lambda_grid_float32.npy", lambda_all)
         np.save(OUT_DIR / "all_N_grid_uint16.npy", N_all)
 
-    # --------------------------------------------------------
-    # Wykresy
-    # --------------------------------------------------------
 
     print("Tworzenie wykresów kandydatów...")
 
@@ -549,7 +473,6 @@ def main():
         candidates_per_page=10
     )
 
-    # Dla stresowych: jedna nakładka wszystkich 100 oraz strony po 10.
     plot_overlay(
         t_grid=t_grid,
         selected_indices=stress_candidate_ids,
@@ -570,9 +493,6 @@ def main():
         candidates_per_page=10
     )
 
-    # --------------------------------------------------------
-    # Podsumowanie w konsoli
-    # --------------------------------------------------------
 
     print("\n=== Podsumowanie symulacji ===")
     print(f"średnia liczba ataków       = {np.mean(total_attacks):.3f}")

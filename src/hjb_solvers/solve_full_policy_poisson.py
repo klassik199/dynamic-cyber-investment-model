@@ -1,21 +1,4 @@
-# solve_full_policy_poisson.py
-# Pełne rozwiązanie polityki optymalnej dla modelu z jednorodnym procesem Poissona.
-#
-# Wariant Poissona ma stałą intensywność:
-#     lambda_P = E_Hawkes[N_T] / T,
-# dzięki czemu oczekiwana liczba ataków w horyzoncie [0,T]
-# jest taka sama jak w wariancie Hawkesa.
-#
-# Po usunięciu stanu lambda równanie HJB zależy od (t,H):
-#
-# 0 = V_t + inf_{z in [0,z_max]} {
-#       c(z) + (z-rho H)V_H + pi(H) + eta_d S(H,v) lambda_P
-#     },
-#
-# V(T,H) = -sqrt(H).
-#
-# Skrypt rozwiązuje problem metodą iteracji polityki i niejawnego schematu
-# różnic skończonych na siatce (t,H).
+"""Solve the Poisson benchmark with a constant intensity matched to the expected Hawkes attack count."""
 
 from __future__ import annotations
 
@@ -41,7 +24,6 @@ REQUIRED_PARAMS = (
     "zeta", "gamma", "z_max",
     "T", "N", "N_h", "eps_z",
 )
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -96,7 +78,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def load_params(path: Path) -> dict:
     if not path.exists():
         raise FileNotFoundError(
@@ -114,17 +95,8 @@ def load_params(path: Path) -> dict:
 
     return params
 
-
 def expected_hawkes_count(params: dict) -> float:
-    """
-    Oblicza E[N_T] dla:
-        d lambda_t = xi(alpha-lambda_t)dt + beta dN_t.
-
-    Dla k = xi-beta:
-        E[lambda_t] = lambda_inf
-                      + (lambda_0-lambda_inf) exp(-k t),
-        lambda_inf = xi*alpha/k.
-    """
+    """Expected Hawkes attack count over the horizon [0,T]."""
     alpha = float(params["alfa"])
     xi = float(params["ksi"])
     beta = float(params["beta"])
@@ -144,7 +116,6 @@ def expected_hawkes_count(params: dict) -> float:
         + (lambda0 - lambda_inf) * (1.0 - math.exp(-k * T)) / k
     )
 
-
 def leakage_probability(H: np.ndarray, params: dict, variant: str) -> np.ndarray:
     v = float(params["v"])
 
@@ -158,7 +129,6 @@ def leakage_probability(H: np.ndarray, params: dict, variant: str) -> np.ndarray
 
     raise ValueError(f"Nieobsługiwany wariant: {variant}")
 
-
 def premium(H: np.ndarray, S: np.ndarray, params: dict) -> np.ndarray:
     pi0 = float(params["pi_0"])
     r = float(params["r"])
@@ -166,11 +136,9 @@ def premium(H: np.ndarray, S: np.ndarray, params: dict) -> np.ndarray:
 
     return pi0 * (1.0 - r * (1.0 - S / v))
 
-
 def utility(H: np.ndarray) -> np.ndarray:
-    """Funkcja użyteczności terminalnej U(H)=sqrt(H)."""
+    """Terminal utility U(H)=sqrt(H)."""
     return np.sqrt(np.maximum(H, 0.0))
-
 
 def solve_tridiagonal(
     lower: np.ndarray,
@@ -178,12 +146,7 @@ def solve_tridiagonal(
     upper: np.ndarray,
     rhs: np.ndarray,
 ) -> np.ndarray:
-    """
-    Algorytm Thomasa dla układu trójdiagonalnego.
-
-    lower ma długość n-1 i odpowiada elementom A[i,i-1],
-    upper ma długość n-1 i odpowiada elementom A[i,i+1].
-    """
+    """Thomas algorithm for tridiagonal linear systems."""
     n = diagonal.size
 
     if rhs.size != n:
@@ -221,13 +184,8 @@ def solve_tridiagonal(
 
     return solution
 
-
 def spatial_derivative(V: np.ndarray, dH: float) -> np.ndarray:
-    """
-    Pochodna V_H:
-    - różnica centralna wewnątrz siatki,
-    - różnice jednostronne na brzegach.
-    """
+    """Approximate V_H with centered differences and one-sided boundary differences."""
     derivative = np.empty_like(V, dtype=np.float64)
 
     derivative[1:-1] = (V[2:] - V[:-2]) / (2.0 * dH)
@@ -235,7 +193,6 @@ def spatial_derivative(V: np.ndarray, dH: float) -> np.ndarray:
     derivative[-1] = (V[-1] - V[-2]) / dH
 
     return derivative
-
 
 def solve_fixed_policy_step(
     V_next: np.ndarray,
@@ -248,14 +205,7 @@ def solve_fixed_policy_step(
     lambda_poisson: float,
     params: dict,
 ) -> np.ndarray:
-    """
-    Rozwiązuje jeden niejawny krok czasowy przy ustalonej polityce z.
-
-    Dyskretyzacja:
-        (I - dt L^z)V^n = V^{n+1} + dt f^z,
-
-    gdzie L^z V = (z-rho H)V_H.
-    """
+    """Solve one implicit Poisson-model time step for a fixed policy."""
     rho = float(params["rho"])
     zeta = float(params["zeta"])
     gamma = float(params["gamma"])
@@ -263,13 +213,9 @@ def solve_fixed_policy_step(
 
     drift = z - rho * H
 
-    # Monotoniczna aproksymacja generatora:
-    # dla drift>0 przejście do H_{k+1},
-    # dla drift<0 przejście do H_{k-1}.
     rate_up = np.maximum(drift, 0.0) / dH
     rate_down = np.maximum(-drift, 0.0) / dH
 
-    # Warunek ograniczenia stanu na brzegach.
     rate_down[0] = 0.0
     rate_up[-1] = 0.0
 
@@ -284,7 +230,6 @@ def solve_fixed_policy_step(
     rhs = V_next + dt * running_cost
 
     return solve_tridiagonal(lower, diagonal, upper, rhs)
-
 
 def solve_poisson_policy(
     params: dict,
@@ -334,7 +279,6 @@ def solve_poisson_policy(
     z_guess = np.zeros(N_h + 1, dtype=np.float64)
 
     for n in range(N - 1, -1, -1):
-        # Ciepły start: polityka z późniejszej chwili.
         if n < N - 1:
             z_guess = z_policy[n + 1].astype(np.float64, copy=True)
 
@@ -381,7 +325,6 @@ def solve_poisson_policy(
                 f"Ostatni błąd={final_error:.6e}."
             )
 
-        # Ostatnie rozwiązanie liniowe dla ostatecznej polityki.
         V_current = solve_fixed_policy_step(
             V_next=V_next,
             z=z_guess,
@@ -427,7 +370,6 @@ def solve_poisson_policy(
         "H0_index": k0,
     }
 
-
 def save_surface_plot(
     t_grid: np.ndarray,
     H_grid: np.ndarray,
@@ -435,7 +377,6 @@ def save_surface_plot(
     zlabel: str,
     output_path: Path,
 ) -> None:
-    # Lżejsza siatka tylko do wizualizacji.
     t_idx = np.linspace(0, len(t_grid) - 1, min(201, len(t_grid))).astype(int)
     h_idx = np.linspace(0, len(H_grid) - 1, min(101, len(H_grid))).astype(int)
 
@@ -463,7 +404,6 @@ def save_surface_plot(
     fig.tight_layout()
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-
 
 def save_results(
     params: dict,
@@ -502,7 +442,6 @@ def save_results(
     ) as file:
         json.dump(params_out, file, indent=2, ensure_ascii=False)
 
-    # Dodatkowa nazwa zgodna z częścią wcześniejszych skryptów.
     with (output_dir / "full_solver_params.json").open(
         "w", encoding="utf-8"
     ) as file:
@@ -567,7 +506,6 @@ def save_results(
 
     return output_dir
 
-
 def run_variant(
     params: dict,
     variant: str,
@@ -611,7 +549,6 @@ def run_variant(
     )
     print(f"Czas obliczeń: {elapsed:.2f} s")
     print(f"Wyniki: {output_dir.resolve()}")
-
 
 def main() -> None:
     args = parse_args()

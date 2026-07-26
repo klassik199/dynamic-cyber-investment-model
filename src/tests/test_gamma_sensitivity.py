@@ -1,3 +1,5 @@
+"""Run a sensitivity check for the quadratic investment cost parameter gamma."""
+
 import json
 from pathlib import Path
 
@@ -67,24 +69,22 @@ def bilinear_interpolate(
 def solve_for_gamma(params_base: dict, gamma_value: float) -> dict:
     params = params_base.copy()
 
-    # Normalny krok czasowy.
+
     params["N"] = 1000
 
-    # Grubsza siatka po lambda do szybkiego testu.
+
     params["N_lambda"] = 50
 
-    # Ustawiamy większe ograniczenie inwestycji.
+
     params["z_max"] = 100
 
-    # Testowana wartość parametru kosztu kwadratowego.
+
     params["gamma"] = gamma_value
 
-    # Stały zakres siatki H do testów.
-    # Dla z_max = 100 oszacowanie daje około 88.48,
-    # więc H_max = 100 zawiera dodatkowy zapas.
+
     params["H_max"] = 100
 
-    # Utrzymujemy dH = 2.
+
     params["N_h"] = 50
 
     rho = float(params["rho"])

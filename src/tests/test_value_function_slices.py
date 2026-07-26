@@ -1,3 +1,5 @@
+"""Save and plot value-function slices at selected time points."""
+
 import json
 from pathlib import Path
 
@@ -13,24 +15,16 @@ from solver import (
 )
 
 
-# =====================================================================
-# USTAWIENIA TESTU
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 OUTPUT_DIR = "value_function_slices_results"
 
 LEAKAGE_FUNCTION = "exp"
 
-# Momenty czasu, dla których zapisujemy przekroje funkcji wartości.
+
 SNAPSHOT_TIMES = [0.0, 0.25, 0.5, 0.75]
 
 PRINT_EVERY = 250
 
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -73,10 +67,6 @@ def snapshot_indices_from_times(params: dict, grids: dict) -> dict:
 def format_time_label(t: float) -> str:
     return f"t={t:.2f}".replace(".", "_")
 
-
-# =====================================================================
-# ROZWIĄZYWANIE HJB Z ZAPISEM SNAPSHOTÓW V
-# =====================================================================
 
 def solve_and_store_value_snapshots(params: dict) -> dict:
     grids = build_grids(params)
@@ -186,10 +176,6 @@ def solve_and_store_value_snapshots(params: dict) -> dict:
     }
 
 
-# =====================================================================
-# DIAGNOSTYKA MONOTONICZNOŚCI
-# =====================================================================
-
 def compute_value_diagnostics(result: dict) -> pd.DataFrame:
     grids = result["grids"]
     params = result["params"]
@@ -228,10 +214,6 @@ def compute_value_diagnostics(result: dict) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
-
-# =====================================================================
-# ZAPIS PRZEKROJÓW DO CSV
-# =====================================================================
 
 def save_slice_data(result: dict, output_dir: Path) -> None:
     grids = result["grids"]
@@ -282,10 +264,6 @@ def save_npz(result: dict, output_dir: Path) -> None:
 
     np.savez_compressed(output_dir / "value_function_snapshots.npz", **arrays)
 
-
-# =====================================================================
-# WYKRESY
-# =====================================================================
 
 def plot_V_vs_H(result: dict, output_dir: Path) -> None:
     grids = result["grids"]
@@ -385,10 +363,6 @@ def plot_V_heatmaps(result: dict, output_dir: Path) -> None:
         fig.savefig(output_dir / f"V_heatmap_{label}.pdf")
         plt.close(fig)
 
-
-# =====================================================================
-# GŁÓWNY TEST
-# =====================================================================
 
 def run_test() -> None:
     params = load_params(PARAMS_PATH)

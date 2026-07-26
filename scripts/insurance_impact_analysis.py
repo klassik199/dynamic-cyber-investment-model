@@ -1,3 +1,5 @@
+"""Compute and compare the full-grid S1 policies with and without insurance."""
+
 import json
 from pathlib import Path
 from copy import deepcopy
@@ -18,38 +20,14 @@ from solver import (
 )
 
 
-# =====================================================================
-# ANALIZA WPLYWU UBEZPIECZENIA -- WERSJA POPRAWIONA
-# =====================================================================
-# Skrypt:
-# 1. NIE przelicza wariantu ubezpieczonego.
-# 2. Wczytuje poprawny bazowy wariant z folderu INSURED_RESULTS_DIR.
-# 3. Sprawdza, czy polityka ubezpieczona nie jest wyzerowana.
-# 4. Liczy wariant bez ubezpieczenia dla eta_d=80 i z_max=100.
-# 5. Tworzy porownanie:
-#       Delta z^* = z^*_{bez ubezpieczenia} - z^*_{z ubezpieczeniem}
-#
-# Uruchom dopiero po zakonczeniu solvera S1 i sprawdzeniu, ze:
-# full_grid_results_S1_new/z_policy_full_float32.npy nie jest zerowe.
-
-
-# =====================================================================
-# USTAWIENIA
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 
-# Folder z poprawnie przeliczonym wariantem bazowym S1.
-# Jeśli po solverze zmienisz nazwę folderu na full_grid_results_S1,
-# możesz tutaj zmienić ścieżkę.
 INSURED_RESULTS_DIR = Path("full_grid_results_S1")
 
-# Folder wyników tej analizy.
 OUTPUT_ROOT = Path("insurance_impact_results_fixed_eta80_zmax100")
 NO_INSURANCE_DIR = OUTPUT_ROOT / "no_insurance_eta80_zmax100"
 COMPARISON_DIR = OUTPUT_ROOT / "comparison"
 
-# Parametry wariantu bez ubezpieczenia.
 NO_INSURANCE_UPDATES = {
     "pi_0": 0.0,
     "r": 0.0,
@@ -57,7 +35,6 @@ NO_INSURANCE_UPDATES = {
     "z_max": 100.0,
 }
 
-# Pełna siatka, zgodna z wariantem bazowym.
 FULL_N = 1000
 FULL_N_LAMBDA = 200
 FULL_N_H = 200
@@ -68,10 +45,6 @@ SNAPSHOT_TIMES = [0.0, 0.25, 0.5, 0.75]
 PRINT_EVERY = 100
 OVERWRITE_NO_INSURANCE = True
 
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -115,7 +88,6 @@ def read_grid_csv(path: Path, column: str) -> np.ndarray:
         raise FileNotFoundError(f"Brak pliku siatki: {path.resolve()}")
     df = pd.read_csv(path)
     if column not in df.columns:
-        # awaryjnie bierzemy pierwszą kolumnę
         return df.iloc[:, 0].to_numpy(dtype=float)
     return df[column].to_numpy(dtype=float)
 
@@ -163,10 +135,7 @@ def save_heatmap_csv(path: Path, lambda_grid: np.ndarray, H_grid: np.ndarray, va
 
 
 def save_excel_pl_copy(src: Path, dst: Path) -> None:
-    """
-    Kopia CSV wygodniejsza dla polskiego Excela:
-    separator ; i przecinek dziesiętny.
-    """
+    """Save a Polish Excel-friendly copy of a CSV file."""
     df = pd.read_csv(src)
     dst.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dst, index=False, sep=";", decimal=",")
@@ -177,10 +146,6 @@ def copy_csv_matrix_excel_pl(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(dst, index=False, sep=";", decimal=",")
 
-
-# =====================================================================
-# SOLVER DLA WARIANTU BEZ UBEZPIECZENIA
-# =====================================================================
 
 def run_no_insurance_solver(base_params: dict) -> dict:
     params = prepare_params(base_params, NO_INSURANCE_UPDATES)
@@ -356,10 +321,6 @@ def run_no_insurance_solver(base_params: dict) -> dict:
     return summary
 
 
-# =====================================================================
-# POROWNANIE WARIANTOW
-# =====================================================================
-
 def make_comparison(base_params: dict, no_summary: dict) -> None:
     COMPARISON_DIR.mkdir(parents=True, exist_ok=True)
     excel_dir = COMPARISON_DIR / "excel_pl"
@@ -377,7 +338,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     if z_ins.shape != z_no.shape:
         raise ValueError(f"Niezgodne rozmiary polityk: insured={z_ins.shape}, no={z_no.shape}")
 
-    # Siatki bierzemy z wariantu ubezpieczonego, bo to jest baseline.
     t_grid = read_grid_csv(INSURED_RESULTS_DIR / "t_grid.csv", "t")
     lambda_grid = read_grid_csv(INSURED_RESULTS_DIR / "lambda_grid.csv", "lambda")
     H_grid = read_grid_csv(INSURED_RESULTS_DIR / "H_grid.csv", "H")
@@ -392,7 +352,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
 
     insured_summary = load_summary(INSURED_RESULTS_DIR / "full_solver_summary.json")
 
-    # Jeżeli summary nie zawiera parametrów, uzupełniamy je z model_params.
     insured_params = load_summary(INSURED_RESULTS_DIR / "full_solver_params.json")
     if not insured_params:
         insured_params = prepare_params(base_params, None)
@@ -430,7 +389,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     summary_df.to_csv(summary_path, index=False)
     summary_df.to_csv(COMPARISON_DIR / "insurance_impact_summary_excel_pl.csv", index=False, sep=";", decimal=",")
 
-    # Tabela LaTeX.
     tex = []
     tex.append(r"\begin{center}")
     tex.append(r"\textbf{Tabela X. Porównanie wariantu z ubezpieczeniem i bez ubezpieczenia}")
@@ -455,13 +413,11 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     tex.append(r"\end{center}")
     (COMPARISON_DIR / "insurance_impact_table.tex").write_text("\n".join(tex), encoding="utf-8")
 
-    # Różnice polityk.
     selected_indices = [snapshot_index(t, dt, N) for t in SNAPSHOT_TIMES]
     selected_indices = sorted(set(selected_indices))
 
     diff_summaries = []
 
-    # Heatmapy 2x2 dla różnicy.
     fig, axes = plt.subplots(2, 2, figsize=(12, 9))
     axes = axes.ravel()
 
@@ -519,7 +475,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
         ax.set_xlabel(r"Intensywność ataków $\lambda$")
         ax.set_ylabel(r"Poziom zabezpieczeń $H$")
 
-    # Jeśli liczba osi > liczba snapshotów.
     for ax in axes[len(selected_indices):]:
         ax.axis("off")
 
@@ -541,8 +496,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     diff_summary_df.to_csv(diff_summary_path, index=False)
     diff_summary_df.to_csv(COMPARISON_DIR / "insurance_impact_difference_summary_excel_pl.csv", index=False, sep=";", decimal=",")
 
-    # Powierzchnie różnic do Excela: t-H przy lambda_0 oraz t-lambda przy H_0.
-    # Polityka ma N warstw czasu, więc używamy t_grid[:N].
     t_policy_grid = t_grid[:N]
 
     delta_t_H_lambda0 = np.zeros((N, len(H_grid)), dtype=float)
@@ -559,7 +512,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     save_excel_pl_copy(COMPARISON_DIR / "delta_z_surface_t_H_lambda0.csv", excel_dir / "delta_z_surface_t_H_lambda0_excel_pl.csv")
     save_excel_pl_copy(COMPARISON_DIR / "delta_z_surface_t_lambda_H0.csv", excel_dir / "delta_z_surface_t_lambda_H0_excel_pl.csv")
 
-    # Downsample do Excela/wykresów.
     t_idx = np.linspace(0, N - 1, 101, dtype=int)
     H_idx = np.linspace(0, len(H_grid) - 1, 101, dtype=int)
     lam_idx = np.linspace(0, len(lambda_grid) - 1, 101, dtype=int)
@@ -586,7 +538,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
         excel_dir / "delta_z_surface_t_lambda_H0_downsampled_excel_pl.csv",
     )
 
-    # Prosty wykres przekrojów po H dla lambda_0.
     fig, ax = plt.subplots(figsize=(9, 5.5))
     colors = ["#1f4e79", "#4f7f73", "#b06a37", "#8f3f3f"]
     for idx, n in enumerate(selected_indices):
@@ -605,7 +556,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     fig.savefig(COMPARISON_DIR / "delta_z_slices_t_by_H_lambda0.pdf")
     plt.close(fig)
 
-    # Metadane.
     comparison_metadata = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "definition": "Delta z = z_no_insurance - z_insured",
@@ -640,10 +590,6 @@ def make_comparison(base_params: dict, no_summary: dict) -> None:
     print(f"- {COMPARISON_DIR / 'excel_pl'}")
 
 
-# =====================================================================
-# MAIN
-# =====================================================================
-
 def main() -> None:
     print("\n" + "=" * 80)
     print("Analiza wpływu ubezpieczenia -- wersja poprawiona")
@@ -651,7 +597,6 @@ def main() -> None:
 
     base_params = load_params(PARAMS_PATH)
 
-    # Kontrola folderu bazowego.
     if not INSURED_RESULTS_DIR.exists():
         raise FileNotFoundError(
             f"Nie znaleziono folderu z wariantem ubezpieczonym: {INSURED_RESULTS_DIR.resolve()}\n"
@@ -660,7 +605,6 @@ def main() -> None:
 
     validate_policy_nonzero(INSURED_RESULTS_DIR / "z_policy_full_float32.npy", "z ubezpieczeniem")
 
-    # Kontrola zgodności podstawowych parametrów wariantu ubezpieczonego.
     insured_params = load_summary(INSURED_RESULTS_DIR / "full_solver_params.json")
     if insured_params:
         print("\nParametry wariantu ubezpieczonego wczytane z full_solver_params.json:")
@@ -668,10 +612,8 @@ def main() -> None:
             if key in insured_params:
                 print(f"{key}: {insured_params[key]}")
 
-    # Liczymy wariant bez ubezpieczenia.
     no_summary = run_no_insurance_solver(base_params)
 
-    # Porównanie.
     make_comparison(base_params, no_summary)
 
 

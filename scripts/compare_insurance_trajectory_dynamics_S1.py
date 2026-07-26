@@ -1,21 +1,4 @@
-# compare_insurance_trajectory_dynamics_S1.py
-#
-# Porównanie trajektorii optymalnych dla modelu:
-#   1) z ubezpieczeniem,
-#   2) bez ubezpieczenia,
-# na tych samych wybranych trajektoriach procesu Hawkesa.
-#
-# Tworzone wykresy:
-#   - z_t^* z ubezpieczeniem i bez ubezpieczenia,
-#   - H_t z ubezpieczeniem i bez ubezpieczenia,
-#   - skumulowany koszt ryzyka:
-#       ubezpieczenie:  ∫[pi(H_s)+eta_d S(H_s,v) lambda_s] ds,
-#       bez ubezp.:     ∫ eta S(H_s,v) lambda_s ds.
-#
-# Dodatkowo skrypt zapisuje:
-#   - szczegółowe CSV dla obu scenariuszy,
-#   - tabelę metryk,
-#   - porównawczą tabelę LaTeX.
+"""Compare optimal S1 trajectories with and without insurance on the same Hawkes paths."""
 
 from __future__ import annotations
 
@@ -28,10 +11,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
-# ============================================================
-# Ustawienia domyślne
-# ============================================================
 
 DEFAULT_BASELINE_ID = 6221
 DEFAULT_STRESS_ID = 57457
@@ -51,10 +30,6 @@ COLOR_UNINSURED = "#7A1F2B"
 COLOR_SHADE = "#DFA7AE"
 GRID_COLOR = "#D9D9D9"
 
-
-# ============================================================
-# Wczytywanie parametrów, polityk i trajektorii
-# ============================================================
 
 def load_json_first_existing(paths: list[Path]) -> dict:
     for path in paths:
@@ -173,10 +148,6 @@ def load_selected_path(
     return lambda_grid, N_grid, dN, source
 
 
-# ============================================================
-# Kontrola zgodności wariantów
-# ============================================================
-
 def get_number(params: dict, key: str) -> float:
     if key not in params:
         raise KeyError(f"Brak parametru '{key}' w pliku parametrów.")
@@ -225,10 +196,6 @@ def validate_common_parameters(
             + "\n".join(mismatches)
         )
 
-
-# ============================================================
-# Model
-# ============================================================
 
 def leakage_S1(
     H: np.ndarray | float,
@@ -465,10 +432,6 @@ def compute_variant_dynamics(
 
     return df, metrics
 
-
-# ============================================================
-# Estetyka wykresów
-# ============================================================
 
 def format_axes(ax: plt.Axes) -> None:
     ax.set_xlim(0.0, 1.0)
@@ -721,10 +684,6 @@ def make_plots(
     )
 
 
-# ============================================================
-# Tabela LaTeX
-# ============================================================
-
 def latex_number(value: float, digits: int = 3) -> str:
     if pd.isna(value):
         return "--"
@@ -802,10 +761,6 @@ def write_latex_table(
 
     out_path.write_text(content, encoding="utf-8")
 
-
-# ============================================================
-# Argumenty i główny przebieg
-# ============================================================
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

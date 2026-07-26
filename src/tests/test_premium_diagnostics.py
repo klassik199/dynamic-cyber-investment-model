@@ -1,3 +1,5 @@
+"""Generate diagnostics for leakage probabilities and insurance premiums."""
+
 import json
 from pathlib import Path
 
@@ -33,7 +35,7 @@ def nearest_index(grid: np.ndarray, value: float) -> int:
 def main() -> None:
     params = load_params()
 
-    # Aktualne parametry bazowe do testów.
+
     params["z_max"] = 100
     params["H_max"] = 100
     params["gamma"] = 0.3
@@ -50,7 +52,7 @@ def main() -> None:
     pi_0 = float(params["pi_0"])
     r = float(params["r"])
 
-    # Bazowo używamy S_1, czyli funkcji wykładniczej.
+
     S1 = S_exp(H_grid, v, a_1)
     S2 = S_rational(H_grid, v, a_2, b)
 
@@ -105,7 +107,7 @@ def main() -> None:
             f"{premium_S1[idx]:12.6f}"
         )
 
-    # Wykres 1: względne ryzyko S/v.
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.plot(H_grid, relative_risk_S1, linewidth=2, label=r"$S_1(H,v)/v$")
@@ -123,7 +125,7 @@ def main() -> None:
     fig.savefig(output_dir / "relative_risk_S_over_v.pdf")
     plt.close(fig)
 
-    # Wykres 2: względna redukcja ryzyka.
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.plot(H_grid, risk_reduction_S1, linewidth=2, label=r"$1-S_1(H,v)/v$")
@@ -141,7 +143,7 @@ def main() -> None:
     fig.savefig(output_dir / "relative_risk_reduction.pdf")
     plt.close(fig)
 
-    # Wykres 3: składka.
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.plot(H_grid, premium_S1, linewidth=2, label=r"$\pi(H)$ dla $S_1$")
@@ -158,7 +160,7 @@ def main() -> None:
     fig.savefig(output_dir / "premium_function.pdf")
     plt.close(fig)
 
-    # Jeżeli istnieją snapshoty strategii, porównujemy z(t, lambda_0, H) ze składką.
+
     snapshots_path = Path("policy_slices_results") / "policy_snapshots.npz"
 
     if snapshots_path.exists():
@@ -198,7 +200,7 @@ def main() -> None:
 
         print(f"\nZapisano przekrój strategii i składki do: {policy_csv_path.resolve()}")
 
-        # Wspólny wykres: strategia i składka jako funkcje H.
+
         fig, ax1 = plt.subplots(figsize=(9, 5))
 
         for key in snapshot_keys:

@@ -1,3 +1,5 @@
+"""Compare selected insurance scenarios using the initial optimal policy."""
+
 import json
 from pathlib import Path
 
@@ -85,7 +87,7 @@ def solve_scenario(
 ) -> tuple[dict, dict, np.ndarray, dict]:
     params = params_base.copy()
 
-    # Parametry bazowe solvera.
+
     params["N"] = 1000
     params["N_lambda"] = 100
     params["N_h"] = 100
@@ -94,7 +96,7 @@ def solve_scenario(
     params["H_max"] = 100
     params["gamma"] = 0.3
 
-    # Parametry scenariusza ubezpieczeniowego.
+
     params["pi_0"] = pi_0
     params["r"] = r
     params["eta_d"] = eta_d
@@ -418,20 +420,7 @@ def main() -> None:
         output_dir=output_dir,
     )
 
-    # Efekt zniżki składki:
-    # dodatnia wartość oznacza, że mechanizm zniżki zwiększa inwestycję.
-    #diff_discount = scenario_z["base"] - scenario_z["no_discount"]
 
-    #plot_difference_heatmap(
-    #    grids=common_grids,
-    #    difference=diff_discount,
-    #    title=r"Efekt zniżki składki: $z^*_{\mathrm{bazowy}}-z^*_{r=0}$",
-    #    output_name="heatmap_effect_premium_discount",
-    #    output_dir=output_dir,
-    #)
-
-    # Efekt braku ubezpieczenia:
-    # dodatnia wartość oznacza większą inwestycję bez transferu ryzyka.
     diff_no_insurance = scenario_z["no_insurance"] - scenario_z["base"]
 
     plot_difference_heatmap(

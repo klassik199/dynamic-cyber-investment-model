@@ -1,3 +1,5 @@
+"""Compare optimal policies for the exponential and rational leakage functions."""
+
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -15,10 +17,6 @@ from solver import (
 )
 
 
-# =====================================================================
-# USTAWIENIA TESTU
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 OUTPUT_DIR = "leakage_function_comparison_results"
 
@@ -35,19 +33,15 @@ SCENARIOS = [
     },
 ]
 
-# Testowa siatka przestrzenna.
+
 N_LAMBDA_TEST = 100
 N_H_TEST = 100
 
-# Liczba kroków czasowych zostaje z model_params.json.
+
 N_TEST = None
 
 PRINT_EVERY = 250
 
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -122,10 +116,6 @@ def prepare_params(base_params: dict) -> dict:
 
     return params
 
-
-# =====================================================================
-# ROZWIĄZYWANIE MODELU DLA DANEJ FUNKCJI S
-# =====================================================================
 
 def solve_leakage_scenario(base_params: dict, scenario: dict) -> dict:
     params = prepare_params(base_params)
@@ -253,10 +243,6 @@ def solve_leakage_scenario(base_params: dict, scenario: dict) -> dict:
     }
 
 
-# =====================================================================
-# PORÓWNANIA I ZAPIS WYNIKÓW
-# =====================================================================
-
 def compute_difference_summary(results: dict) -> pd.DataFrame:
     z_exp = results["S1_exp"]["z_0"]
     z_rat = results["S2_rational"]["z_0"]
@@ -373,10 +359,6 @@ def save_npz(results: dict, output_dir: Path) -> None:
 
     np.savez_compressed(output_dir / "S1_vs_S2_arrays.npz", **arrays)
 
-
-# =====================================================================
-# WYKRESY
-# =====================================================================
 
 def plot_z_vs_H(results: dict, output_dir: Path) -> None:
     grids = results["S1_exp"]["grids"]
@@ -550,10 +532,6 @@ def make_all_plots(results: dict, output_dir: Path) -> None:
         output_dir=output_dir,
     )
 
-
-# =====================================================================
-# GŁÓWNY TEST
-# =====================================================================
 
 def run_test() -> None:
     base_params = load_params(PARAMS_PATH)

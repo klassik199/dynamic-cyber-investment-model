@@ -1,3 +1,5 @@
+"""Run a sensitivity check for the upper investment bound z_max."""
+
 import json
 from pathlib import Path
 
@@ -62,17 +64,16 @@ def bilinear_interpolate(array: np.ndarray, lambda_value: float, H_value: float,
 def solve_for_zmax(params_base: dict, z_max_value: float) -> dict:
     params = params_base.copy()
 
-    # Normalny krok czasowy.
+
     params["N"] = 1000
 
-    # Grubsza siatka przestrzenna do szybkiego testu całego horyzontu.
+
     params["N_lambda"] = 50
 
-    # Testowana wartość ograniczenia.
+
     params["z_max"] = z_max_value
 
-    # Dobieramy H_max zgodnie z oszacowaniem:
-    # H_max > z_max / rho * (1 - exp(-rho T)).
+
     rho = float(params["rho"])
     T = float(params["T"])
     H_0 = float(params["H_0"])
@@ -82,10 +83,10 @@ def solve_for_zmax(params_base: dict, z_max_value: float) -> dict:
         z_max_value / rho * (1.0 - np.exp(-rho * T)),
     )
 
-    # Dodajemy zapas 15% i zaokrąglamy do wielokrotności 5.
+
     params["H_max"] = 5.0 * np.ceil(1.15 * H_required / 5.0)
 
-    # Utrzymujemy mniej więcej dH ≈ 2 na teście.
+
     params["N_h"] = int(round(params["H_max"] / 2.0))
 
     grids = build_grids(params)

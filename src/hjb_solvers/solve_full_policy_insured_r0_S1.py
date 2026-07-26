@@ -1,3 +1,5 @@
+"""Solve the full-grid S1 policy for the insured case without the premium discount mechanism."""
+
 import json
 from pathlib import Path
 from copy import deepcopy
@@ -15,34 +17,20 @@ from solver import (
 )
 
 
-# =====================================================================
-# USTAWIENIA FINALNEGO SOLVERA
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 OUTPUT_DIR = "insurance_impact_results_fixed_eta80_zmax100/insured_r0_pi300_eta40_zmax100"
 
-# Pełna siatka docelowa.
 FULL_N = 1000
 FULL_N_LAMBDA = 200
 FULL_N_H = 200
 
-# Bazowo liczymy dla funkcji wykładniczej S_1.
 LEAKAGE_FUNCTION = "exp"
 
-# Momenty czasu dla heatmap i snapshotów.
 SNAPSHOT_TIMES = [0.0, 0.25, 0.5, 0.75]
 
-# Wypisywanie diagnostyki.
 PRINT_EVERY = 100
 
-# Czy nadpisywać stare wyniki w folderze OUTPUT_DIR.
 OVERWRITE = True
-
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -54,7 +42,6 @@ def load_params(path: str = PARAMS_PATH) -> dict:
 
     return params
 
-
 def prepare_params(base_params: dict) -> dict:
     params = deepcopy(base_params)
 
@@ -62,9 +49,6 @@ def prepare_params(base_params: dict) -> dict:
     params["N_lambda"] = int(FULL_N_LAMBDA)
     params["N_h"] = int(FULL_N_H)
 
-    # Wariant ubezpieczenia bez mechanizmu rabatowego.
-    # Pozostałe parametry są zgodne z wariantem bazowym:
-    # pi_0 = 300, eta_d = 40, z_max = 100.
     params["r"] = 0.0
     params["pi_0"] = 300.0
     params["eta_d"] = 40.0
@@ -72,19 +56,16 @@ def prepare_params(base_params: dict) -> dict:
 
     return params
 
-
 def make_output_dir(path: str = OUTPUT_DIR) -> Path:
     output_dir = Path(path)
     output_dir.mkdir(exist_ok=True)
     return output_dir
 
-
 def nearest_index(grid: np.ndarray, value: float) -> int:
     return int(np.argmin(np.abs(grid - value)))
 
-
 def snapshot_indices_from_times(params: dict, grids: dict) -> dict:
-    """Zwraca mapę: indeks czasowy n -> czas t_n."""
+    """Map selected snapshot times to time-grid indices."""
     T = float(params["T"])
     N = int(params["N"])
     dt = float(grids["dt"])
@@ -99,41 +80,25 @@ def snapshot_indices_from_times(params: dict, grids: dict) -> dict:
 
     return index_to_time
 
-
 def time_label(t: float) -> str:
     return f"t_{t:.3f}".replace(".", "_")
-
 
 def save_json(data: dict, path: Path) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-
 def save_surface_csv(path: Path, t_grid: np.ndarray, x_grid: np.ndarray, values: np.ndarray) -> None:
-    """
-    Zapisuje powierzchnię do CSV w formacie wygodnym dla Excela.
-    values ma wymiar (len(t_grid), len(x_grid)).
-    Pierwsza kolumna to t, kolejne kolumny odpowiadają wartościom x_grid.
-    """
+    """Save a time surface to CSV; the first column is time."""
     columns = ["t"] + [f"{x:.6g}" for x in x_grid]
     data = np.column_stack([t_grid, values])
     df = pd.DataFrame(data, columns=columns)
     df.to_csv(path, index=False)
 
-
 def save_heatmap_csv(path: Path, lambda_grid: np.ndarray, H_grid: np.ndarray, values: np.ndarray) -> None:
-    """
-    Zapisuje macierz wartości na siatce (lambda, H) do CSV.
-    Wiersze odpowiadają H, kolumny odpowiadają lambda.
-    """
+    """Save a lambda-H matrix to CSV with H in rows and lambda in columns."""
     df = pd.DataFrame(values.T, index=H_grid, columns=lambda_grid)
     df.index.name = "H"
     df.to_csv(path)
-
-
-# =====================================================================
-# WYKRESY
-# =====================================================================
 
 def plot_heatmap(
     values: np.ndarray,
@@ -167,7 +132,6 @@ def plot_heatmap(
     fig.savefig(output_path_pdf)
     plt.close(fig)
 
-
 def plot_snapshot_slices(
     snapshots: dict,
     grids: dict,
@@ -185,7 +149,6 @@ def plot_snapshot_slices(
     j0 = nearest_index(lambda_grid, lambda_0)
     k0 = nearest_index(H_grid, H_0)
 
-    # Przekroje po H przy lambda_0.
     fig, ax = plt.subplots(figsize=(9, 5.5))
     for t, arr in sorted(snapshots.items()):
         ax.plot(H_grid, arr[j0, :], linewidth=2.0, label=rf"$t={t:.2f}$")
@@ -199,7 +162,6 @@ def plot_snapshot_slices(
     fig.savefig(output_dir / f"{variable_name}_snapshot_slices_vs_H_lambda0.pdf")
     plt.close(fig)
 
-    # Przekroje po lambda przy H_0.
     fig, ax = plt.subplots(figsize=(9, 5.5))
     for t, arr in sorted(snapshots.items()):
         ax.plot(lambda_grid, arr[:, k0], linewidth=2.0, label=rf"$t={t:.2f}$")
@@ -212,11 +174,6 @@ def plot_snapshot_slices(
     fig.savefig(output_dir / f"{variable_name}_snapshot_slices_vs_lambda_H0.png", dpi=300)
     fig.savefig(output_dir / f"{variable_name}_snapshot_slices_vs_lambda_H0.pdf")
     plt.close(fig)
-
-
-# =====================================================================
-# GŁÓWNY SOLVER
-# =====================================================================
 
 def run_full_solver() -> None:
     base_params = load_params(PARAMS_PATH)
@@ -256,13 +213,11 @@ def run_full_solver() -> None:
     print(f"Indeks H_0: k0 = {k0}, H[k0] = {H_grid[k0]}")
     print("Snapshoty:", sorted(snapshot_indices.values()))
 
-    # Zapis parametrów i siatek.
     save_json(params, output_dir / "full_solver_params.json")
     pd.DataFrame({"t": t_grid}).to_csv(output_dir / "t_grid.csv", index=False)
     pd.DataFrame({"lambda": lambda_grid}).to_csv(output_dir / "lambda_grid.csv", index=False)
     pd.DataFrame({"H": H_grid}).to_csv(output_dir / "H_grid.csv", index=False)
 
-    # Pełna polityka z^n w formacie float32, do późniejszej symulacji trajektorii.
     z_policy_path = output_dir / "z_policy_full_float32.npy"
     if z_policy_path.exists() and OVERWRITE:
         z_policy_path.unlink()
@@ -283,21 +238,17 @@ def run_full_solver() -> None:
     }
     save_json(metadata, output_dir / "z_policy_full_metadata.json")
 
-    # Powierzchnie do Excela.
     z_surface_t_H_lambda0 = np.zeros((N + 1, N_h + 1), dtype=np.float64)
     z_surface_t_lambda_H0 = np.zeros((N + 1, N_lambda + 1), dtype=np.float64)
     V_surface_t_H_lambda0 = np.zeros((N + 1, N_h + 1), dtype=np.float64)
     V_surface_t_lambda_H0 = np.zeros((N + 1, N_lambda + 1), dtype=np.float64)
 
-    # Snapshoty pełnych macierzy na wybranych czasach.
     z_snapshots = {}
     V_snapshots = {}
 
-    # Warunek końcowy.
     V_next = initialize_terminal_value(grids)
     z_start = initialize_strategy(grids)
 
-    # Terminalny punkt do powierzchni.
     V_surface_t_H_lambda0[N, :] = V_next[j0, :]
     V_surface_t_lambda_H0[N, :] = V_next[:, k0]
     z_surface_t_H_lambda0[N, :] = 0.0
@@ -350,7 +301,6 @@ def run_full_solver() -> None:
             )
             break
 
-        # Zapis pełnej polityki i powierzchni.
         z_policy[current_n, :, :] = z_current.astype("float32")
 
         V_surface_t_H_lambda0[current_n, :] = V_current[j0, :]
@@ -400,19 +350,16 @@ def run_full_solver() -> None:
         V_next = V_current
         z_start = z_current
 
-    # Wymuszenie zapisu memmapa na dysk.
     z_policy.flush()
 
     V_0 = V_next
     z_0 = z_start
 
-    # Zapis powierzchni do Excela.
     save_surface_csv(output_dir / "V_surface_t_H_lambda0.csv", t_grid, H_grid, V_surface_t_H_lambda0)
     save_surface_csv(output_dir / "V_surface_t_lambda_H0.csv", t_grid, lambda_grid, V_surface_t_lambda_H0)
     save_surface_csv(output_dir / "z_surface_t_H_lambda0.csv", t_grid, H_grid, z_surface_t_H_lambda0)
     save_surface_csv(output_dir / "z_surface_t_lambda_H0.csv", t_grid, lambda_grid, z_surface_t_lambda_H0)
 
-    # Snapshoty i heatmapy.
     snapshot_npz_data = {
         "lambda_grid": lambda_grid,
         "H_grid": H_grid,
@@ -446,11 +393,9 @@ def run_full_solver() -> None:
 
     np.savez_compressed(output_dir / "V_z_snapshots.npz", **snapshot_npz_data)
 
-    # Przekroje kontrolne dla snapshotów.
     plot_snapshot_slices(V_snapshots, grids, params, output_dir, "V", r"Funkcja wartości $V$")
     plot_snapshot_slices(z_snapshots, grids, params, output_dir, "z", r"Optymalna intensywność inwestycji $z^*$")
 
-    # Diagnostyka i podsumowanie.
     diagnostics_df = pd.DataFrame(diagnostics_rows)
     diagnostics_df.to_csv(output_dir / "full_solver_diagnostics.csv", index=False)
 

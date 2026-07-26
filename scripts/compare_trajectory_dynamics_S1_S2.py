@@ -1,19 +1,4 @@
-# compare_trajectory_dynamics_S1_S2.py
-# Porownanie trajektorii wyznaczonych dla funkcji wycieku S_1 i S_2.
-#
-# Skrypt:
-# 1. wczytuje gotowe pliki CSV z trajectory_dynamics_S1/data i
-#    trajectory_dynamics_S2/data,
-# 2. tworzy porownawcze wykresy:
-#       - z_t^*,
-#       - H_t,
-#       - skladki chwilowej,
-#       - chwilowej straty zatrzymanej,
-# 3. zapisuje podsumowanie do CSV,
-# 4. generuje gotowa tabele porownawcza w LaTeX-u.
-#
-# Przed uruchomieniem tego skryptu nalezy najpierw policzyc dynamike
-# obu wariantow dla tych samych simulation_id.
+"""Compare trajectory dynamics obtained for the leakage functions S1 and S2."""
 
 from pathlib import Path
 import argparse
@@ -23,10 +8,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-# ============================================================
-# Domyslne ustawienia
-# ============================================================
 
 DEFAULT_BASELINE_ID = 6221
 DEFAULT_STRESS_ID = 57457
@@ -38,7 +19,6 @@ DEFAULT_OUT_DIR = Path("trajectory_comparison_S1_S2")
 FIGSIZE = (8.3, 5.25)
 DPI = 300
 
-# Kolory: dwa wyraznie rozne odcienie tej samej tonacji.
 COLORS = {
     "z_star": {
         "S1": "#0B2F5B",   # granat
@@ -68,7 +48,6 @@ LINEWIDTHS = {
     "S2": 2.2,
 }
 
-# Tlo okresow wzrostu intensywnosci lambda_t.
 COLOR_GROWTH_SHADE = "#DFC0C5"
 GROWTH_SHADE_ALPHA = 0.36
 GROWTH_SMOOTH_WINDOW = 21
@@ -76,10 +55,6 @@ GROWTH_MAX_GAP = 0.012
 GROWTH_MIN_DURATION = 0.008
 GROWTH_MIN_NET_RISE = 2.0
 
-
-# ============================================================
-# Wczytywanie danych
-# ============================================================
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -189,15 +164,8 @@ def check_compatible_paths(df_s1: pd.DataFrame, df_s2: pd.DataFrame, group: str)
         )
 
 
-# ============================================================
-# Okresy wzrostu intensywnosci
-# ============================================================
-
 def find_lambda_growth_intervals(df: pd.DataFrame) -> list[tuple[float, float]]:
-    """
-    Wyznacza szersze okresy wzrostu lambda_t.
-    Te same prostokaty sa nanoszone na wszystkie wykresy danego scenariusza.
-    """
+    """Find broader periods of increasing attack intensity for figure shading."""
     t = df["t"].to_numpy(dtype=float)
     lam = df["lambda_t"].to_numpy(dtype=float)
 
@@ -287,12 +255,8 @@ def add_growth_shading(ax, intervals: list[tuple[float, float]]) -> None:
         )
 
 
-# ============================================================
-# Estetyka wykresow
-# ============================================================
-
 def format_axes(ax):
-    """Tylko bardzo jasna pozioma siatka."""
+    """Apply the common axis formatting used in the figures."""
     ax.xaxis.grid(False)
     ax.yaxis.grid(
         True,
@@ -460,10 +424,6 @@ def plot_four_panel(
     plt.close(fig)
 
 
-# ============================================================
-# Podsumowanie i tabela LaTeX
-# ============================================================
-
 def summarize_variant(
     df: pd.DataFrame,
     group: str,
@@ -565,10 +525,6 @@ def create_latex_table(summary: pd.DataFrame, out_path: Path) -> None:
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
 
-
-# ============================================================
-# Glowna czesc
-# ============================================================
 
 def main():
     args = parse_args()

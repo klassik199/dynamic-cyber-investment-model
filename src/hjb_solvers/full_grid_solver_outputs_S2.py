@@ -1,3 +1,5 @@
+"""Compute the full-grid HJB-PIDE policy for the rational leakage function S2."""
+
 import json
 from pathlib import Path
 
@@ -18,16 +20,11 @@ from solver import (
 )
 
 
-# =====================================================================
-# FINALNY SOLVER NA PEŁNEJ SIATCE — WARIANT S_2
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 OUTPUT_DIR = Path("full_grid_results_S2")
 
 LEAKAGE_FUNCTION = "rational"
 
-# Wymuszamy pełną siatkę, niezależnie od tego, co chwilowo jest w JSON.
 FORCE_N = 1000
 FORCE_N_LAMBDA = 200
 FORCE_N_H = 200
@@ -36,21 +33,13 @@ SNAPSHOT_TIMES = [0.0, 0.25, 0.5, 0.75]
 
 PRINT_EVERY = 250
 
-# Pliki powierzchni przerzedzamy do ok. 101 x 101 wartości.
 DOWNSAMPLE_ROWS = 101
 DOWNSAMPLE_COLS = 101
 
-# Czy od razu generować wykresy powierzchniowe w Pythonie.
 MAKE_SURFACE_PLOTS = True
 
-# Perspektywa wykresów 3D.
 SURFACE_ELEV = 25
 SURFACE_AZIM = -135
-
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -66,12 +55,11 @@ def load_params(path: str = PARAMS_PATH) -> dict:
 
     return params
 
-
 def nearest_index(grid: np.ndarray, value: float) -> int:
     return int(np.argmin(np.abs(grid - value)))
 
-
 def snapshot_indices_from_times(params: dict, grids: dict) -> dict:
+    """Map selected snapshot times to time-grid indices."""
     dt = float(grids["dt"])
     N = int(params["N"])
     T = float(params["T"])
@@ -85,10 +73,8 @@ def snapshot_indices_from_times(params: dict, grids: dict) -> dict:
 
     return index_to_time
 
-
 def format_time_label(t: float) -> str:
     return f"t_{t:.3f}".replace(".", "_")
-
 
 def evenly_spaced_indices(n: int, target: int) -> np.ndarray:
     if n <= target:
@@ -106,7 +92,6 @@ def evenly_spaced_indices(n: int, target: int) -> np.ndarray:
 
     return idx[:target]
 
-
 def save_dataframe_both_formats(df: pd.DataFrame, path_standard: Path, path_excel: Path) -> None:
     """
     Zapisuje plik w dwóch wariantach:
@@ -118,11 +103,6 @@ def save_dataframe_both_formats(df: pd.DataFrame, path_standard: Path, path_exce
 
     df.to_csv(path_standard, index=False)
     df.to_csv(path_excel, index=False, sep=";", decimal=",")
-
-
-# =====================================================================
-# WYKRESY 2D
-# =====================================================================
 
 def plot_heatmap(
     Z: np.ndarray,
@@ -160,7 +140,6 @@ def plot_heatmap(
     fig.savefig(output_stem.with_suffix(".pdf"))
     plt.close(fig)
 
-
 def plot_slices_vs_H(
     snapshots: dict,
     H_grid: np.ndarray,
@@ -183,7 +162,6 @@ def plot_slices_vs_H(
     fig.savefig(output_stem.with_suffix(".png"), dpi=300)
     fig.savefig(output_stem.with_suffix(".pdf"))
     plt.close(fig)
-
 
 def plot_slices_vs_lambda(
     snapshots: dict,
@@ -208,11 +186,6 @@ def plot_slices_vs_lambda(
     fig.savefig(output_stem.with_suffix(".pdf"))
     plt.close(fig)
 
-
-# =====================================================================
-# POWIERZCHNIE 3D
-# =====================================================================
-
 def read_surface_csv(path: Path):
     df = pd.read_csv(path)
 
@@ -223,7 +196,6 @@ def read_surface_csv(path: Path):
     X, Y = np.meshgrid(x, y)
     return X, Y, z
 
-
 def style_3d_axis(ax):
     ax.grid(True)
 
@@ -233,7 +205,6 @@ def style_3d_axis(ax):
 
     ax.tick_params(axis="both", which="major", labelsize=9)
     ax.zaxis.set_tick_params(labelsize=9)
-
 
 def make_surface_plot(
     X: np.ndarray,
@@ -269,7 +240,6 @@ def make_surface_plot(
     ax.set_ylabel(ylabel, labelpad=10)
     ax.set_zlabel(zlabel, labelpad=10)
 
-    # t=0 z przodu.
     ax.set_ylim(float(np.max(Y)), float(np.min(Y)))
 
     style_3d_axis(ax)
@@ -281,7 +251,6 @@ def make_surface_plot(
     fig.savefig(output_stem.with_suffix(".png"), dpi=300)
     fig.savefig(output_stem.with_suffix(".pdf"))
     plt.close(fig)
-
 
 def make_contour_plot(
     X: np.ndarray,
@@ -310,7 +279,6 @@ def make_contour_plot(
     fig.savefig(output_stem.with_suffix(".png"), dpi=300)
     fig.savefig(output_stem.with_suffix(".pdf"))
     plt.close(fig)
-
 
 def create_surface_plots_from_downsampled(output_dir: Path) -> None:
     input_dir = output_dir / "surfaces_downsampled" / "standard"
@@ -388,11 +356,6 @@ def create_surface_plots_from_downsampled(output_dir: Path) -> None:
             output_stem=plot_dir / f"{spec['stem']}_contour",
         )
 
-
-# =====================================================================
-# PRZERZEDZANIE CSV
-# =====================================================================
-
 def downsample_surface_df(df: pd.DataFrame) -> pd.DataFrame:
     if df.shape[1] < 2:
         raise ValueError("Plik powierzchni musi mieć pierwszą kolumnę osi i co najmniej jedną kolumnę wartości.")
@@ -407,7 +370,6 @@ def downsample_surface_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.loc[df.index[row_idx], [first_col] + selected_value_cols].copy()
     out.reset_index(drop=True, inplace=True)
     return out
-
 
 def downsample_surface_csvs(output_dir: Path) -> None:
     surface_files = [
@@ -453,11 +415,6 @@ def downsample_surface_csvs(output_dir: Path) -> None:
 
     pd.DataFrame(summary_rows).to_csv(output_dir / "downsample_summary.csv", index=False)
 
-
-# =====================================================================
-# GŁÓWNY SOLVER
-# =====================================================================
-
 def run_solver() -> None:
     params = load_params(PARAMS_PATH)
     grids = build_grids(params)
@@ -501,7 +458,6 @@ def run_solver() -> None:
     V_next = initialize_terminal_value(grids)
     z_start = initialize_strategy(grids)
 
-    # Pełna polityka z^n, n=0,...,N-1.
     z_policy_path = OUTPUT_DIR / "z_policy_full_float32.npy"
     z_policy = np.lib.format.open_memmap(
         z_policy_path,
@@ -510,18 +466,15 @@ def run_solver() -> None:
         shape=(N, N_lambda + 1, N_h + 1),
     )
 
-    # Powierzchnie do wykresów.
     V_surface_t_H = np.zeros((N + 1, N_h + 1), dtype=np.float64)
     V_surface_t_lambda = np.zeros((N + 1, N_lambda + 1), dtype=np.float64)
 
     z_surface_t_H = np.zeros((N + 1, N_h + 1), dtype=np.float64)
     z_surface_t_lambda = np.zeros((N + 1, N_lambda + 1), dtype=np.float64)
 
-    # Warunek terminalny dla V.
     V_surface_t_H[N, :] = V_next[j0, :]
     V_surface_t_lambda[N, :] = V_next[:, k0]
 
-    # Terminalna strategia technicznie ustawiona jako 0.
     z_surface_t_H[N, :] = 0.0
     z_surface_t_lambda[N, :] = 0.0
 
@@ -572,10 +525,8 @@ def run_solver() -> None:
             )
             break
 
-        # Zapis pełnej polityki.
         z_policy[current_n, :, :] = z_current.astype(np.float32)
 
-        # Zapis powierzchni.
         V_surface_t_H[current_n, :] = V_current[j0, :]
         V_surface_t_lambda[current_n, :] = V_current[:, k0]
 
@@ -611,9 +562,6 @@ def run_solver() -> None:
     V_0 = V_next
     z_0 = z_start
 
-    # =================================================================
-    # ZAPIS CSV POWIERZCHNI
-    # =================================================================
 
     df_V_t_H = pd.DataFrame(V_surface_t_H, columns=[f"{x:.10g}" for x in H_grid])
     df_V_t_H.insert(0, "t", t_grid)
@@ -632,9 +580,6 @@ def run_solver() -> None:
     df_z_t_H.to_csv(OUTPUT_DIR / "z_surface_t_H_lambda0.csv", index=False)
     df_z_t_lambda.to_csv(OUTPUT_DIR / "z_surface_t_lambda_H0.csv", index=False)
 
-    # =================================================================
-    # ZAPIS SNAPSHOTÓW, HEATMAP I PRZEKROJÓW
-    # =================================================================
 
     heatmap_dir = OUTPUT_DIR / "heatmaps"
     heatmap_dir.mkdir(parents=True, exist_ok=True)
@@ -642,7 +587,6 @@ def run_solver() -> None:
     slice_dir = OUTPUT_DIR / "slices"
     slice_dir.mkdir(parents=True, exist_ok=True)
 
-    # Wspólne skale kolorów dla snapshotów.
     V_min_all = min(float(np.min(V)) for V in V_snapshots.values())
     V_max_all = max(float(np.max(V)) for V in V_snapshots.values())
     z_min_all = min(float(np.min(z)) for z in z_snapshots.values())
@@ -656,7 +600,6 @@ def run_solver() -> None:
     for t, V in sorted(V_snapshots.items()):
         label = format_time_label(t)
 
-        # Dane heatmap.
         pd.DataFrame(V.T, index=H_grid, columns=lambda_grid).to_csv(
             heatmap_dir / f"V_heatmap_data_{label}.csv"
         )
@@ -735,7 +678,6 @@ def run_solver() -> None:
         output_stem=slice_dir / "z_slices_vs_lambda_H0",
     )
 
-    # NPZ ze snapshotami.
     arrays = {
         "lambda_grid": lambda_grid,
         "H_grid": H_grid,
@@ -750,7 +692,6 @@ def run_solver() -> None:
 
     np.savez_compressed(OUTPUT_DIR / "snapshots_S2.npz", **arrays)
 
-    # Przerzedzone CSV i powierzchnie.
     downsample_surface_csvs(OUTPUT_DIR)
 
     if MAKE_SURFACE_PLOTS:

@@ -1,3 +1,5 @@
+"""Check convergence of the policy with respect to the time discretization."""
+
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -15,30 +17,21 @@ from solver import (
 )
 
 
-# =====================================================================
-# USTAWIENIA TESTU
-# =====================================================================
-
 PARAMS_PATH = "model_params.json"
 OUTPUT_DIR = "time_step_convergence_results"
 
-# Test zbieżności względem kroku czasowego.
-# Siatka przestrzenna pozostaje stała, zmieniamy tylko N, czyli dt = T / N.
+
 N_VALUES = [500, 1000, 1500]
 
-# Stała siatka przestrzenna dla testu.
+
 N_LAMBDA_TEST = 100
 N_H_TEST = 100
 
 LEAKAGE_FUNCTION = "exp"
 
-# Wypis diagnostyki co około 1/4 przebiegu.
+
 PRINT_EVERY_FRACTION = 4
 
-
-# =====================================================================
-# FUNKCJE POMOCNICZE
-# =====================================================================
 
 def load_params(path: str = PARAMS_PATH) -> dict:
     path = Path(path)
@@ -111,10 +104,6 @@ def prepare_params(base_params: dict, N_value: int) -> dict:
 
     return params
 
-
-# =====================================================================
-# ROZWIĄZYWANIE DLA JEDNEGO N
-# =====================================================================
 
 def solve_for_N(base_params: dict, N_value: int) -> dict:
     params = prepare_params(base_params, N_value)
@@ -237,10 +226,6 @@ def solve_for_N(base_params: dict, N_value: int) -> dict:
     }
 
 
-# =====================================================================
-# PORÓWNANIE WYNIKÓW DLA RÓŻNYCH N
-# =====================================================================
-
 def compute_pairwise_differences(results: dict) -> pd.DataFrame:
     rows = []
 
@@ -296,10 +281,6 @@ def save_npz(results: dict, output_dir: Path) -> None:
 
     np.savez_compressed(output_dir / "time_step_convergence_arrays.npz", **arrays)
 
-
-# =====================================================================
-# WYKRESY
-# =====================================================================
 
 def plot_summary_metrics(summary_df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -463,10 +444,6 @@ def plot_last_difference_heatmap(results: dict, output_dir: Path) -> None:
         columns=lambda_grid,
     ).to_csv(output_dir / f"heatmap_diff_z_N{N_next}_minus_N{N_prev}.csv")
 
-
-# =====================================================================
-# GŁÓWNY TEST
-# =====================================================================
 
 def run_test() -> None:
     base_params = load_params(PARAMS_PATH)

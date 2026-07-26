@@ -1,5 +1,4 @@
-# test_hawkes_simulation.py
-# Test symulacji procesu Hawkesa N_t dla parametrów z model_params.json.
+"""Simulate Hawkes attack paths and save basic diagnostics."""
 
 from pathlib import Path
 import json
@@ -19,20 +18,12 @@ except ImportError:
     sys.exit(1)
 
 
-# ============================================================
-# Ustawienia testu
-# ============================================================
-
 PARAMS_PATH = Path("model_params.json")
 OUT_DIR = Path("trajectory_test_outputs")
 
-M_TEST = 100000          # liczba testowych symulacji procesu N_t
-SEED0 = 20260705      # ziarno losowania
+M_TEST = 100000
+SEED0 = 20260705
 
-
-# ============================================================
-# Funkcje pomocnicze
-# ============================================================
 
 def load_params(path: Path) -> dict:
     """Wczytuje parametry z model_params.json."""
@@ -122,14 +113,14 @@ def simulate_hawkes_counts(
     t_grid = np.linspace(0.0, T, N + 1)
     dt = T / N
 
-    # Przyrosty Delta N_n = N_{t_{n+1}} - N_{t_n}
+
     dN, _ = np.histogram(timestamps, bins=t_grid)
 
-    # Proces zliczający na siatce
+
     N_grid = np.zeros(N + 1, dtype=int)
     N_grid[1:] = np.cumsum(dN)
 
-    # Dyskretna aktualizacja lambda_t zgodna z Algorytmem 1
+
     lambda_grid = np.empty(N + 1, dtype=float)
     lambda_grid[0] = lambda0
 
@@ -144,10 +135,6 @@ def simulate_hawkes_counts(
 
     return timestamps, t_grid, dN, N_grid, lambda_grid
 
-
-# ============================================================
-# Główna część testu
-# ============================================================
 
 def main():
     start = time.time()
@@ -186,9 +173,6 @@ def main():
     expected_NT = expected_count_linear_hawkes(alpha, xi, beta, lambda0, T)
     print(f"\nTeoretyczne E[N_T] dla modelu liniowego: {expected_NT:.3f}")
 
-    # --------------------------------------------------------
-    # Jedna ścieżka kontrolna
-    # --------------------------------------------------------
 
     timestamps, t_grid, dN, N_grid, lambda_grid = simulate_hawkes_counts(
         T=T,
@@ -206,7 +190,7 @@ def main():
         "lambda_t": lambda_grid
     })
 
-    # dN ma długość N, więc zapisujemy osobno z czasem lewego końca przedziału
+
     increments_df = pd.DataFrame({
         "t_left": t_grid[:-1],
         "t_right": t_grid[1:],
@@ -225,9 +209,6 @@ def main():
     print(f"liczba ataków = {len(timestamps)}")
     print(f"pierwsze czasy skoków = {timestamps[:10]}")
 
-    # --------------------------------------------------------
-    # M_TEST symulacji
-    # --------------------------------------------------------
 
     total_attacks = np.empty(M_TEST, dtype=int)
     max_lambda = np.empty(M_TEST, dtype=float)
@@ -266,9 +247,6 @@ def main():
     print(f"średnia max(lambda_t)       = {np.mean(max_lambda):.3f}")
     print(f"średnia int lambda_t dt     = {np.mean(integrated_lambda):.3f}")
 
-    # --------------------------------------------------------
-    # Proste wykresy diagnostyczne
-    # --------------------------------------------------------
 
     plt.figure(figsize=(9, 4.8))
     plt.step(t_grid, N_grid, where="post")
@@ -288,16 +266,13 @@ def main():
     plt.savefig(OUT_DIR / "hawkes_test_lambda_path.png", dpi=300)
     plt.close()
 
-    # --------------------------------------------------------
-    # Histogram liczby ataków — wersja do pracy
-    # --------------------------------------------------------
 
     median_attacks = np.median(total_attacks)
     q95_attacks = np.quantile(total_attacks, 0.95)
 
     X_MAX_PLOT = 140
 
-    # Biny o szerokości 2, ale wykres pokazujemy tylko do 140.
+
     bin_edges = np.arange(
         np.floor(total_attacks.min() / 2) * 2,
         X_MAX_PLOT + 2,
@@ -316,7 +291,7 @@ def main():
         zorder=2
     )
 
-    # Linie referencyjne
+
     ax.axvline(
         median_attacks,
         color="#E57373",
@@ -335,10 +310,10 @@ def main():
         zorder=5
     )
 
-    # Sztywne ucięcie prawej strony wykresu
+
     ax.set_xlim(left=0, right=X_MAX_PLOT)
 
-    # Opisy wartości na górze wykresu, lekko na prawo od linii
+
     y_top = ax.get_ylim()[1]
     x_offset = 1.2
 

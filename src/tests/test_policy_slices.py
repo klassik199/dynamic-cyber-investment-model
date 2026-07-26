@@ -1,3 +1,5 @@
+"""Save and plot policy slices at selected time points."""
+
 import json
 from pathlib import Path
 
@@ -38,7 +40,7 @@ def make_output_dir(path: str = "policy_slices_results") -> Path:
 def solve_and_save_snapshots(params_base: dict) -> tuple[dict, dict, dict, Path]:
     params = params_base.copy()
 
-    # Parametry testowe do ładnych przekrojów.
+
     params["N"] = 1000
     params["N_lambda"] = 100
     params["N_h"] = 100

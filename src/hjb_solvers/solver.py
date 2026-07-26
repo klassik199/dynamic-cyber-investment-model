@@ -1,3 +1,5 @@
+"""Core routines for solving the HJB-PIDE by policy iteration on the lambda-H grid."""
+
 import numpy as np
 from scipy.sparse import lil_matrix, csr_matrix, eye
 from scipy.sparse.linalg import spsolve
@@ -10,15 +12,8 @@ from functions import (
     terminal_utility,
 )
 
-
 def initialize_terminal_value(grids: dict) -> np.ndarray:
-    """
-    Wyznacza warunek końcowy:
-        V^N_{j,k} = -U(h_k)
-
-    Wynik ma wymiar:
-        (N_lambda + 1, N_h + 1)
-    """
+    """Terminal condition V(T,lambda,H) = -U(H) on the lambda-H grid."""
 
     lambda_grid = grids["lambda"]
     H_grid = grids["H"]
@@ -31,15 +26,8 @@ def initialize_terminal_value(grids: dict) -> np.ndarray:
 
     return V_terminal
 
-
 def initialize_strategy(grids: dict) -> np.ndarray:
-    """
-    Przyjmuje początkowe przybliżenie strategii:
-        z^{N-1,(0)}_{j,k} = 0
-
-    Wynik ma wymiar:
-        (N_lambda + 1, N_h + 1)
-    """
+    """Initial zero policy used as the first policy-iteration guess."""
 
     lambda_grid = grids["lambda"]
     H_grid = grids["H"]
@@ -49,12 +37,7 @@ def initialize_strategy(grids: dict) -> np.ndarray:
     return z_initial
 
 def derivative_H(V: np.ndarray, dH: float) -> np.ndarray:
-    """
-    Oblicza pochodną D_h V po zmiennej H.
-
-    Dla punktów wewnętrznych stosujemy różnicę centralną.
-    Na brzegach stosujemy różnicę jednostronną.
-    """
+    """Approximate V_H with centered differences inside the grid and one-sided differences at the boundary."""
 
     D = np.empty_like(V)
 
@@ -64,13 +47,8 @@ def derivative_H(V: np.ndarray, dH: float) -> np.ndarray:
 
     return D
 
-
 def update_strategy(V: np.ndarray, grids: dict, params: dict) -> np.ndarray:
-    """
-    Aktualizuje strategię optymalną zgodnie ze wzorem:
-
-        z = Pi_[0,z_max] ( ((-D_h V - zeta)^+) / gamma )
-    """
+    """Update the feedback control from the H-derivative of the value function."""
 
     dH = grids["dH"]
 
@@ -87,14 +65,7 @@ def update_strategy(V: np.ndarray, grids: dict, params: dict) -> np.ndarray:
     return z_new
 
 def derivative_lambda(V: np.ndarray, d_lambda: float) -> np.ndarray:
-    """
-    Oblicza pochodną D_lambda V po zmiennej lambda.
-
-    Dla punktów wewnętrznych stosujemy różnicę centralną.
-    Na brzegach stosujemy różnice jednostronne:
-        j = 0         różnica w przód,
-        j = N_lambda  różnica w tył.
-    """
+    """Approximate V_lambda with centered differences and one-sided boundary differences."""
 
     D = np.empty_like(V)
 
@@ -104,17 +75,8 @@ def derivative_lambda(V: np.ndarray, d_lambda: float) -> np.ndarray:
 
     return D
 
-
 def hawkes_jump_interpolation(V: np.ndarray, grids: dict, params: dict) -> np.ndarray:
-    """
-    Oblicza człon nielokalny:
-
-        (I_beta V)_{j,k} ≈ V(lambda_j + beta, h_k)
-
-    Interpolacja jest liniowa w kierunku zmiennej lambda.
-    Jeżeli lambda_j + beta przekracza lambda_max, przyjmujemy wartość
-    na brzegu lambda_max.
-    """
+    """Interpolate V(lambda + beta, H) for the Hawkes jump term."""
 
     lambda_grid = grids["lambda"]
     d_lambda = grids["d_lambda"]
@@ -142,16 +104,7 @@ def compute_running_terms(
     params: dict,
     leakage_function: str = "exp",
 ) -> np.ndarray:
-    """
-    Oblicza człon:
-
-        c(z_{j,k}) + pi(h_k; d, v, r) + eta_d S(h_k,v) lambda_j
-
-    dla wszystkich punktów siatki (lambda_j, h_k).
-
-    Domyślnie używamy funkcji:
-        S_1(H,v) = v exp(-a_1 H).
-    """
+    """Compute investment cost, premium and expected retained loss on the full grid."""
 
     lambda_grid = grids["lambda"]
     H_grid = grids["H"]
@@ -189,26 +142,16 @@ def compute_running_terms(
 
     return running_terms
 
-
 def state_index(j: int, k: int, N_h_points: int) -> int:
-    """
-    Zamienia indeks dwuwymiarowy (j,k) na indeks jednowymiarowy.
-    """
+    """Convert a two-dimensional grid index to a flat index."""
     return j * N_h_points + k
-
 
 def build_hjb_matrix(
     z_old: np.ndarray,
     grids: dict,
     params: dict,
 ) -> csr_matrix:
-    """
-    Buduje macierz A dla układu liniowego:
-
-        A V^{n,(m+1)} = b
-
-    zgodnie ze schematem z punktu 1.2.1.
-    """
+    """Build the sparse matrix for the linear HJB step under a fixed policy."""
 
     lambda_grid = grids["lambda"]
     H_grid = grids["H"]
@@ -255,10 +198,8 @@ def build_hjb_matrix(
 
             drift_H = z_old[j, k] - rho * h_k
 
-            # Człon czasowy: V / dt
             A[row, row] += 1.0 / dt
 
-            # Człon D_lambda V
             if j == 0:
                 col_right = state_index(j + 1, k, N_h_points)
                 col_self = state_index(j, k, N_h_points)
@@ -280,7 +221,6 @@ def build_hjb_matrix(
                 A[row, col_right] += drift_lambda / (2.0 * d_lambda)
                 A[row, col_left] += -drift_lambda / (2.0 * d_lambda)
 
-            # Człon D_h V
             if k == 0:
                 col_up = state_index(j, k + 1, N_h_points)
                 col_self = state_index(j, k, N_h_points)
@@ -302,8 +242,6 @@ def build_hjb_matrix(
                 A[row, col_up] += drift_H / (2.0 * dH)
                 A[row, col_down] += -drift_H / (2.0 * dH)
 
-            # Człon Hawkes:
-            # lambda_j * ((I_beta V)_{j,k} - V_{j,k})
             col_self = state_index(j, k, N_h_points)
             col_jump_left = state_index(j_left, k, N_h_points)
             col_jump_right = state_index(j_left + 1, k, N_h_points)
@@ -321,27 +259,12 @@ def solve_hjb_linear_step(
     params: dict,
     leakage_function: str = "exp",
 ) -> np.ndarray:
-    """
-    Rozwiązuje jeden liniowy układ dla kroku czasowego.
-
-    Używamy stabilnej postaci dyskretyzacji:
-
-        (I / dt - L^z) V^n = V^{n+1} / dt + f^z,
-
-    gdzie L^z oznacza operator zależny od przyjętej strategii,
-    a f^z obejmuje koszty bieżące.
-    """
+    """Solve one implicit time step for a fixed policy."""
 
     dt = grids["dt"]
 
-    # Ta funkcja buduje macierz starej postaci:
-    #     A_old = I / dt + L^z
     A_old = build_hjb_matrix(z_old, grids, params)
 
-    # Potrzebujemy:
-    #     A = I / dt - L^z
-    # Skoro A_old = I / dt + L^z, to:
-    #     A = 2 I / dt - A_old
     size = A_old.shape[0]
     A = (2.0 / dt) * eye(size, format="csr") - A_old
 
@@ -371,18 +294,7 @@ def solve_policy_iteration_step(
     max_iter: int = 20,
     verbose: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, int, float, float]:
-    """
-    Rozwiązuje jeden krok czasowy n za pomocą iteracji strategii.
-
-    Odpowiada punktom 1.2.1--1.2.3 algorytmu.
-
-    Zwraca:
-        V_current  - przybliżenie V^n
-        z_current  - strategię z^n
-        iterations - liczba wykonanych iteracji
-        diff_V     - ostatnia różnica wartości
-        diff_z     - ostatnia różnica strategii
-    """
+    """Run policy iteration for one backward time step."""
 
     eps_V = float(params["eps_V"])
     eps_z = float(params["eps_z"])
@@ -427,12 +339,7 @@ def solve_backward_test(
     leakage_function: str = "exp",
     num_steps: int = 10,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Testowa iteracja wsteczna po czasie.
-
-    Nie rozwiązuje jeszcze całego problemu dla n = N-1,...,0,
-    tylko cofa się o num_steps kroków od warunku końcowego.
-    """
+    """Run a short backward iteration for numerical diagnostics."""
 
     V_next = V_terminal.copy()
     z_start = z_initial.copy()
