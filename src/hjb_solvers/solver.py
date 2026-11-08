@@ -36,27 +36,20 @@ def initialize_strategy(grids: dict) -> np.ndarray:
 
     return z_initial
 
-def derivative_H(V: np.ndarray, dH: float) -> np.ndarray:
-    """Approximate V_H with centered differences inside the grid and one-sided differences at the boundary."""
-
-    D = np.empty_like(V)
-
-    D[:, 0] = (V[:, 1] - V[:, 0]) / dH
-    D[:, 1:-1] = (V[:, 2:] - V[:, :-2]) / (2.0 * dH)
-    D[:, -1] = (V[:, -1] - V[:, -2]) / dH
-
-    return D
-
-def update_strategy(V: np.ndarray, grids: dict, params: dict) -> np.ndarray:
+def update_strategy(V: np.ndarray, grids: dict, params: dict, z_old: np.ndarray) -> np.ndarray:
     """Update the feedback control from the H-derivative of the value function."""
 
     dH = grids["dH"]
+    H_grid = grids["H"]
 
     zeta = float(params["zeta"])
     gamma = float(params["gamma"])
     z_max = float(params["z_max"])
+    rho = float(params["rho"])
 
-    D_H_V = derivative_H(V, dH)
+    drift_H = z_old - rho * H_grid[None, :]
+
+    D_H_V = derivative_H(V, dH, drift_H)
 
     z_new = (-D_H_V - zeta) / gamma
     z_new = np.maximum(z_new, 0.0)
@@ -64,14 +57,35 @@ def update_strategy(V: np.ndarray, grids: dict, params: dict) -> np.ndarray:
 
     return z_new
 
-def derivative_lambda(V: np.ndarray, d_lambda: float) -> np.ndarray:
-    """Approximate V_lambda with centered differences and one-sided boundary differences."""
+def derivative_H(V: np.ndarray, dH: float, drift_H: np.ndarray) -> np.ndarray:
+    """Approximate V_H with upwind differences depending on the sign of drift_H."""
+
+    D = np.empty_like(V)
+
+    D[:, 0] = (V[:, 1] - V[:, 0]) / dH
+    D[:, -1] = (V[:, -1] - V[:, -2]) / dH
+
+    D_forward = (V[:, 2:] - V[:, 1:-1]) / dH
+    D_backward = (V[:, 1:-1] - V[:, :-2]) / dH
+    
+    drift_interior = drift_H[:, 1:-1]
+    D[:, 1:-1] = np.where(drift_interior >= 0, D_forward, D_backward)
+
+    return D
+S
+def derivative_lambda(V: np.ndarray, d_lambda: float, drift_lambda: np.ndarray) -> np.ndarray:
+    """Approximate V_lambda with upwind differences depending on the sign of drift_lambda."""
 
     D = np.empty_like(V)
 
     D[0, :] = (V[1, :] - V[0, :]) / d_lambda
-    D[1:-1, :] = (V[2:, :] - V[:-2, :]) / (2.0 * d_lambda)
     D[-1, :] = (V[-1, :] - V[-2, :]) / d_lambda
+
+    D_forward = (V[2:, :] - V[1:-1, :]) / d_lambda
+    D_backward = (V[1:-1, :] - V[:-2, :]) / d_lambda
+    
+    drift_interior = drift_lambda[1:-1, None]
+    D[1:-1, :] = np.where(drift_interior >= 0, D_forward, D_backward)
 
     return D
 
@@ -217,9 +231,14 @@ def build_hjb_matrix(
             else:
                 col_right = state_index(j + 1, k, N_h_points)
                 col_left = state_index(j - 1, k, N_h_points)
+                col_self = state_index(j, k, N_h_points)
 
-                A[row, col_right] += drift_lambda / (2.0 * d_lambda)
-                A[row, col_left] += -drift_lambda / (2.0 * d_lambda)
+                if drift_lambda >= 0:
+                    A[row, col_right] += drift_lambda / d_lambda
+                    A[row, col_self] += -drift_lambda / d_lambda
+                else:
+                    A[row, col_self] += drift_lambda / d_lambda
+                    A[row, col_left] += -drift_lambda / d_lambda
 
             if k == 0:
                 col_up = state_index(j, k + 1, N_h_points)
@@ -238,9 +257,14 @@ def build_hjb_matrix(
             else:
                 col_up = state_index(j, k + 1, N_h_points)
                 col_down = state_index(j, k - 1, N_h_points)
+                col_self = state_index(j, k, N_h_points)
 
-                A[row, col_up] += drift_H / (2.0 * dH)
-                A[row, col_down] += -drift_H / (2.0 * dH)
+                if drift_H >= 0:
+                    A[row, col_up] += drift_H / dH
+                    A[row, col_self] += -drift_H / dH
+                else:
+                    A[row, col_self] += drift_H / dH
+                    A[row, col_down] += -drift_H / dH
 
             col_self = state_index(j, k, N_h_points)
             col_jump_left = state_index(j_left, k, N_h_points)
@@ -265,8 +289,8 @@ def solve_hjb_linear_step(
 
     A_old = build_hjb_matrix(z_old, grids, params)
 
-    size = A_old.shape[0]
-    A = (2.0 / dt) * eye(size, format="csr") - A_old
+    size = A_old.shape
+    A = (2.0 / dt) * eye(size[0], format="csr") - A_old
 
     running_terms = compute_running_terms(
         z_old,
@@ -281,96 +305,4 @@ def solve_hjb_linear_step(
 
     V_new_vector = spsolve(A, rhs_vector)
 
-    V_new = V_new_vector.reshape(V_next.shape)
-
-    return V_new
-
-def solve_policy_iteration_step(
-    V_next: np.ndarray,
-    z_start: np.ndarray,
-    grids: dict,
-    params: dict,
-    leakage_function: str = "exp",
-    max_iter: int = 20,
-    verbose: bool = True,
-) -> tuple[np.ndarray, np.ndarray, int, float, float]:
-    """Run policy iteration for one backward time step."""
-
-    eps_V = float(params["eps_V"])
-    eps_z = float(params["eps_z"])
-
-    V_old = V_next.copy()
-    z_old = z_start.copy()
-
-    for m in range(max_iter):
-        V_new = solve_hjb_linear_step(
-            V_next=V_next,
-            z_old=z_old,
-            grids=grids,
-            params=params,
-            leakage_function=leakage_function,
-        )
-
-        z_new = update_strategy(V_new, grids, params)
-
-        diff_V = np.max(np.abs(V_new - V_old))
-        diff_z = np.max(np.abs(z_new - z_old))
-
-        if verbose:
-            print(
-                f"iteracja {m + 1:2d}: "
-                f"diff_V = {diff_V:.6e}, "
-                f"diff_z = {diff_z:.6e}"
-            )
-
-        if diff_V < eps_V and diff_z < eps_z:
-            return V_new, z_new, m + 1, diff_V, diff_z
-
-        V_old = V_new
-        z_old = z_new
-
-    return V_new, z_new, max_iter, diff_V, diff_z
-
-def solve_backward_test(
-    V_terminal: np.ndarray,
-    z_initial: np.ndarray,
-    grids: dict,
-    params: dict,
-    leakage_function: str = "exp",
-    num_steps: int = 10,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Run a short backward iteration for numerical diagnostics."""
-
-    V_next = V_terminal.copy()
-    z_start = z_initial.copy()
-
-    for step in range(num_steps):
-        print(f"\nKrok wsteczny testowy {step + 1}/{num_steps}")
-
-        V_current, z_current, iterations, diff_V, diff_z = solve_policy_iteration_step(
-            V_next=V_next,
-            z_start=z_start,
-            grids=grids,
-            params=params,
-            leakage_function=leakage_function,
-            max_iter=20,
-            verbose=False,
-        )
-
-        print(
-            f"iteracje = {iterations}, "
-            f"diff_V = {diff_V:.3e}, "
-            f"diff_z = {diff_z:.3e}, "
-            f"min V = {V_current.min():.6f}, "
-            f"max V = {V_current.max():.6f}, "
-            f"max z = {z_current.max():.6f}"
-        )
-
-        if iterations == 20 or diff_V > 1e3 or diff_z > 1.0:
-            print("\nPrzerwano test: brak zbieżności albo niestabilność numeryczna.")
-            break
-
-        V_next = V_current
-        z_start = z_current
-
-    return V_next, z_start
+    return V_new_vector.reshape(V_next.shape)
